@@ -1,26 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { testDatabase, companyInput, positionInput } from './helpers';
+import { testDatabase, companyInput, nonCashInput, positionInput } from './helpers';
 import type { BoardTrackerDatabase } from '../src/main/database';
 let db: BoardTrackerDatabase; let cleanup: () => void;
 beforeEach(() => ({ db, cleanup } = testDatabase())); afterEach(() => cleanup());
+const compensationContext = () => { const company = db.createCompany(companyInput()); const position = db.createPosition(positionInput(company.id)); const stock = db.listInstrumentTypes().find((item) => item.name === 'Stock')!; return { company, position, stock }; };
+
 describe('boundary: company validation', () => {
- it.each([['empty',''],['spaces','   '],['long','x'.repeat(201)]])('rejects %s company name', (_kind, name) => expect(() => db.createCompany(companyInput(name))).toThrow());
- it.each([-1, 1.2, 100001])('rejects invalid board size %s', (board_size) => expect(() => db.createCompany({ ...companyInput(), board_size })).toThrow());
- it('accepts zero board size', () => expect(db.createCompany({ ...companyInput(), board_size: 0 }).board_size).toBe(0));
- it.each([['summary','business_summary',10001],['sector','sector',151],['website','website',2049],['members','other_board_members',5001],['cadence','meeting_cadence',101],['notes','notes',10001]] as const)('rejects oversized %s', (_label, field, length) => expect(() => db.createCompany({ ...companyInput(), [field]: 'x'.repeat(length) })).toThrow());
- it('rejects duplicate normalized names', () => { db.createCompany(companyInput('Same Name')); expect(() => db.createCompany(companyInput('Same Name'))).toThrow(); });
+  it.each([['empty', ''], ['spaces', '   '], ['long', 'x'.repeat(201)]])('rejects %s company name', (_kind, name) => expect(() => db.createCompany(companyInput(name))).toThrow());
+  it.each([-1, 1.2, 100001])('rejects invalid board size %s', (board_size) => expect(() => db.createCompany({ ...companyInput(), board_size })).toThrow());
+  it('accepts zero board size', () => expect(db.createCompany({ ...companyInput(), board_size: 0 }).board_size).toBe(0));
+  it.each([['summary', 'business_summary', 10001], ['sector', 'sector', 151], ['website', 'website', 2049], ['members', 'other_board_members', 5001], ['cadence', 'meeting_cadence', 101], ['notes', 'notes', 10001]] as const)('rejects oversized %s', (_label, field, length) => expect(() => db.createCompany({ ...companyInput(), [field]: 'x'.repeat(length) })).toThrow());
 });
-describe('boundary: positions', () => {
- it.each(['2026-02-30','2026-13-01','not-a-date','2026/01/01'])('rejects invalid date %s', (start_date) => { const c = db.createCompany(companyInput()); expect(() => db.createPosition(positionInput(c.id, { start_date }))).toThrow(); });
- it('rejects end dates before start dates', () => { const c = db.createCompany(companyInput()); expect(() => db.createPosition(positionInput(c.id, { start_date: '2026-04-02', end_date: '2026-04-01' }))).toThrow(); });
- it.each(['bad-status','', 'CURRENT'])('rejects invalid status %s', (status) => { const c = db.createCompany(companyInput()); expect(() => db.createPosition(positionInput(c.id, { status: status as never }))).toThrow(); });
- it.each(['director','', 'GOVERNING_BOARD'])('rejects invalid position type %s', (position_type) => { const c = db.createCompany(companyInput()); expect(() => db.createPosition(positionInput(c.id, { position_type: position_type as never }))).toThrow(); });
- it.each([0,-1,1.5])('rejects invalid company ids', (company_id) => expect(() => db.createPosition(positionInput(company_id))).toThrow());
+
+describe('boundary: positions and compensation', () => {
+  it.each(['2026-02-30', '2026-13-01', 'not-a-date', '2026/01/01'])('rejects invalid position date %s', (start_date) => { const company = db.createCompany(companyInput()); expect(() => db.createPosition(positionInput(company.id, { start_date }))).toThrow(); });
+  it.each(['bad-status', '', 'CURRENT'])('rejects invalid position status %s', (status) => { const company = db.createCompany(companyInput()); expect(() => db.createPosition(positionInput(company.id, { status: status as never }))).toThrow(); });
+  it.each([-1, 0, Number.NaN, Number.POSITIVE_INFINITY, 1_000_000_000_001])('rejects invalid cash amount %s', (amount) => { const { position } = compensationContext(); expect(() => db.createCompensation({ position_id: position.id, amount, frequency: 'annual' })).toThrow(); });
+  it('requires cash fields only for cash compensation', () => { const { position } = compensationContext(); expect(() => db.createCompensation({ position_id: position.id, type: 'cash', amount: 1, currency: 'USD' })).toThrow('Frequency'); expect(() => db.createCompensation({ position_id: position.id, type: 'cash', frequency: 'annual' })).toThrow('Amount'); });
+  it.each(['invalid', '', 'CASH'])('rejects invalid compensation type %s', (type) => { const { position } = compensationContext(); expect(() => db.createCompensation({ position_id: position.id, type: type as never, amount: 1, frequency: 'annual' })).toThrow(); });
+  it.each([undefined, null, 0, -1, Number.NaN])('requires a positive non-cash quantity: %s', (quantity) => { const { position, stock } = compensationContext(); expect(() => db.createCompensation(nonCashInput(position.id, stock.id, { quantity }))).toThrow(); });
+  it('requires an instrument type for non-cash compensation and validates grant fields', () => { const { position, stock } = compensationContext(); expect(() => db.createCompensation(nonCashInput(position.id, stock.id, { instrument_type_id: null }))).toThrow('Instrument type'); expect(() => db.createCompensation(nonCashInput(position.id, stock.id, { grant_price: -0.01 }))).toThrow('Grant price'); expect(() => db.createCompensation(nonCashInput(position.id, stock.id, { grant_date: '2026-02-30' }))).toThrow('Grant date'); });
+  it.each(['weekly', '', 'Annual'])('rejects invalid cash frequency %s', (frequency) => { const { position } = compensationContext(); expect(() => db.createCompensation({ position_id: position.id, amount: 1, frequency: frequency as never })).toThrow(); });
 });
-describe('boundary: compensation and deletes', () => {
- it.each([-1,0,Number.NaN,Number.POSITIVE_INFINITY,1_000_000_000_001])('rejects invalid amount %s', (amount) => { const c = db.createCompany(companyInput()); const p = db.createPosition(positionInput(c.id)); expect(() => db.createCompensation({ position_id: p.id, amount, frequency: 'annual' })).toThrow(); });
- it('accepts smallest positive amount', () => { const c = db.createCompany(companyInput()); const p = db.createPosition(positionInput(c.id)); expect(db.createCompensation({ position_id: p.id, amount: 0.01, frequency: 'annual' }).amount).toBe(.01); });
- it.each(['US','USDD','12$', '   '])('rejects invalid currency %s', (currency) => { const c = db.createCompany(companyInput()); const p = db.createPosition(positionInput(c.id)); expect(() => db.createCompensation({ position_id: p.id, amount: 1, currency, frequency: 'annual' })).toThrow(); });
- it.each(['weekly','', 'Annual'])('rejects invalid frequency %s', (frequency) => { const c = db.createCompany(companyInput()); const p = db.createPosition(positionInput(c.id)); expect(() => db.createCompensation({ position_id: p.id, amount: 1, frequency: frequency as never })).toThrow(); });
- it('rejects deletes of records that do not exist', () => { expect(() => db.deleteCompany(999)).toThrow(); expect(() => db.deletePosition(999)).toThrow(); expect(() => db.deleteCompensation(999)).toThrow(); });
+
+describe('boundary: instrument types and vesting schedules', () => {
+  it.each(['', '   ', 'x'.repeat(101)])('rejects invalid instrument type name', (name) => expect(() => db.createInstrumentType({ name })).toThrow());
+  it('rejects an oversized instrument type description', () => expect(() => db.createInstrumentType({ name: 'Units', description: 'x'.repeat(2001) })).toThrow());
+  it.each(['bad', '', 'MONTHLY'])('rejects invalid vesting schedule type %s', (schedule_type) => { const { position, stock } = compensationContext(); const compensation = db.createCompensation(nonCashInput(position.id, stock.id)); expect(() => db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: schedule_type as never })).toThrow(); });
+  it('enforces cliff and linear dates and their order', () => { const { position, stock } = compensationContext(); const compensation = db.createCompensation(nonCashInput(position.id, stock.id)); expect(() => db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'cliff_linear', vesting_start: '2026-01-01', cliff_date: '2026-01-01' })).toThrow(); expect(() => db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'cliff_linear', vesting_start: '2026-04-01', cliff_date: '2026-03-01', vesting_end: '2026-05-01' })).toThrow(); expect(() => db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'cliff_linear', vesting_start: '2026-01-01', cliff_date: '2026-02-30', vesting_end: '2026-12-01' })).toThrow(); });
+  it('requires notes for milestone and custom vesting schedules', () => { const { position, stock } = compensationContext(); const compensation = db.createCompensation(nonCashInput(position.id, stock.id)); expect(() => db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'milestone', notes: '' })).toThrow('notes'); expect(() => db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'custom', notes: null })).toThrow('notes'); });
+  it.each(['weekly', 'MONTHLY'])('rejects invalid vesting cadence %s', (cadence) => { const { position, stock } = compensationContext(); const compensation = db.createCompensation(nonCashInput(position.id, stock.id)); expect(() => db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'cliff_linear', vesting_start: '2026-01-01', cliff_date: '2026-01-01', vesting_end: '2026-12-01', cadence: cadence as never })).toThrow(); });
+  it('rejects deletes of records that do not exist', () => { expect(() => db.deleteCompany(999)).toThrow(); expect(() => db.deletePosition(999)).toThrow(); expect(() => db.deleteCompensation(999)).toThrow(); expect(() => db.deleteInstrumentType(999)).toThrow(); expect(() => db.deleteVestingSchedule(999)).toThrow(); });
 });

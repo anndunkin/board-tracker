@@ -74,7 +74,7 @@ tracking.
   path traversal on file links, input-size boundaries).
 - GitHub Actions CI build on `windows-latest`, tagged `v0.1.0` release.
 
-### v0.2.0 — Non-cash compensation & vesting
+### v0.2.0 — Non-cash compensation & vesting (Delivered)
 - Compensation table extended to non-cash: instrument type, quantity,
   grant/strike price.
 - Vesting Schedules table + UI: cliff/linear, milestone, custom types.

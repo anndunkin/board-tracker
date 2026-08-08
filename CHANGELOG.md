@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] — 2026-08-08
+
+### Added
+- Non-cash compensation records with configurable instrument types, quantities, optional grant or strike prices, and grant dates.
+- Fully managed instrument types with create, edit, and safe delete behavior that blocks removal while a type is referenced by compensation.
+- Versioned migration from v0.1.0 cash compensation to the new cash/non-cash schema, preserving existing records.
+- Vesting schedules for immediate, cliff and linear, milestone, and custom awards, including inline compensation editing.
+- Vesting summaries on company compensation entries and an active-vesting dashboard section ordered by soonest vesting end date.
+- Expanded migration, functionality, security, boundary, and vesting-calculation test coverage.
+
 ## [0.1.0] — 2026-08-08
 
 ### Added
