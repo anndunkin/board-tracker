@@ -1,0 +1,68 @@
+[
+  {
+    "name": "AutoBridge Systems",
+    "website": "autobridgesystems.com",
+    "sector": "GovTech / AI",
+    "business_summary": "Dual AI platforms for the public sector: GovAssist (citizen-facing workflow automation — permits, vendor onboarding, constituent inquiries) and GovCon (government contracting, bid/contract management, compliance, procurement transparency). Founded 2024, Fulton, MD."
+  },
+  {
+    "name": "WayMaker Partners",
+    "website": "waymakerre.com",
+    "sector": "Real Estate / Multifamily",
+    "business_summary": "Faith-based, tech-enabled multifamily investment platform focused on Class A apartments in DFW/Sun Belt. Targets attainable and luxury rental housing. JV partnership with JPI and Madera Residential (3,300+ units, 9 communities; 11,000+ units under Madera JV after 2024 merger). Irving, TX; founded 2020."
+  },
+  {
+    "name": "ArmorX.ai",
+    "website": "armorx.ai",
+    "sector": "Cybersecurity",
+    "business_summary": "AI-powered ransomware detection and prevention platform for Windows endpoints and servers. Detects and neutralizes threats before, during, and after attack. No-agent, lightweight architecture."
+  },
+  {
+    "name": "Bowtie Security",
+    "website": "bowtie.security",
+    "sector": "Cybersecurity / Zero Trust",
+    "business_summary": "Zero Trust Network Access (ZTNA) and Sovereign SASE platform for aerospace, defense, finance, and healthcare. Built for ITAR, FedRAMP, and NIST compliance. Offers private-cloud and air-gapped deployments."
+  },
+  {
+    "name": "CrowdGenAI",
+    "website": "cgai.co",
+    "sector": "AI / Data Ownership",
+    "business_summary": "CPU-based AI training platform with blockchain watermarking for data provenance and creator monetization. Operates a crowdsourced AI data marketplace. Launched at Davos 2025."
+  },
+  {
+    "name": "Global Interconnection Group (GIG)",
+    "website": "globalinterconnectiongroup.com",
+    "sector": "Energy Infrastructure",
+    "business_summary": "HVDC cable manufacturing, subsea/cross-border interconnector development and operation, and ancillary infrastructure services. Three divisions: Advanced Cables, Global Interconnectors, GIG Services. Listed on Euronext Amsterdam (CABLE)."
+  },
+  {
+    "name": "Open Origin",
+    "website": "openorigin.industries",
+    "sector": "Clean Energy / AI Infrastructure",
+    "business_summary": "Develops grid-free clean power plants (solar + green ammonia) — Uninterruptible Power Plants (UPPs) — for AI data centers. 5GW target capacity. Signed $1.8B MOU with Government of Maharashtra, India at WEF 2025."
+  },
+  {
+    "name": "Open Policy",
+    "website": "openpolicy.co",
+    "sector": "GovTech / AI Policy Intelligence",
+    "business_summary": "AI-powered Policy Opportunity Management (POM) platform mapping live regulatory signals to company strategy. Monitors 70+ jurisdictions. Supports coalition advocacy and government affairs automation."
+  },
+  {
+    "name": "SuperAlign",
+    "website": "superalign.ai",
+    "sector": "AI Security / Governance",
+    "business_summary": "Enterprise AI safety and governance tooling. Three products: Surface (endpoint AI asset scanner), Radar (network AI discovery/shadow AI detection), AIRiskDB (threat intelligence for AI tools and MCP servers)."
+  },
+  {
+    "name": "RiskOpsAI",
+    "website": "riskopsai.com",
+    "sector": "Cybersecurity / GRC",
+    "business_summary": "Agentic AI-driven GRC SaaS platform automating the risk and compliance lifecycle: continuous control testing, AI risk quantification, compliance mapping, and an AI assurance model (GRAIL framework, via TrustModel.AI alliance)."
+  },
+  {
+    "name": "KELA Cyber",
+    "website": "ke-la.com",
+    "sector": "Threat Intelligence / Cybersecurity",
+    "business_summary": "Threat Exposure Management platform: CTI (cyber threat intelligence), darknet monitoring in 100+ languages, External Attack Surface Management (EASM), and Third-Party Risk Management. Founded by Israeli Unit 8200 veterans. Backed by Vector Capital (PE)."
+  }
+]

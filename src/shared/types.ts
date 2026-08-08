@@ -1,0 +1,12 @@
+export type PositionStatus = 'current' | 'former' | 'potential';
+export type PositionType = 'governing_board' | 'advisory_board' | 'advisor';
+export type CompensationFrequency = 'one_time' | 'annual' | 'quarterly' | 'monthly' | 'per_meeting';
+export interface CompanyInput { name: string; business_summary?: string | null; sector?: string | null; website?: string | null; board_size?: number | null; other_board_members?: string | null; meeting_cadence?: string | null; notes?: string | null; }
+export interface Company extends Required<Omit<CompanyInput, 'board_size'>> { id: number; board_size: number | null; created_at: string; updated_at: string; position_count?: number; }
+export interface PositionInput { company_id: number; status: PositionStatus; position_type: PositionType; start_date?: string | null; end_date?: string | null; expected_decision_date?: string | null; notes?: string | null; }
+export interface Position extends Omit<PositionInput, 'start_date' | 'end_date' | 'expected_decision_date' | 'notes'> { id: number; start_date: string | null; end_date: string | null; expected_decision_date: string | null; notes: string | null; created_at: string; updated_at: string; }
+export interface CompensationInput { position_id: number; amount: number; currency?: string; frequency: CompensationFrequency; notes?: string | null; }
+export interface Compensation extends Required<Omit<CompensationInput, 'notes'>> { id: number; notes: string | null; created_at: string; updated_at: string; }
+export interface CompanyDetail extends Company { positions: Array<Position & { compensation: Compensation[] }>; }
+export interface DashboardData { counts: Record<PositionStatus, number>; upcoming: Array<Position & { company_name: string }>; }
+export interface BoardTrackerApi { dashboard: () => Promise<DashboardData>; companies: { list: (search?: string) => Promise<Company[]>; get: (id: number) => Promise<CompanyDetail | null>; create: (input: CompanyInput) => Promise<Company>; update: (id: number, input: CompanyInput) => Promise<Company>; delete: (id: number) => Promise<void>; }; positions: { create: (input: PositionInput) => Promise<Position>; update: (id: number, input: PositionInput) => Promise<Position>; delete: (id: number) => Promise<void>; }; compensation: { create: (input: CompensationInput) => Promise<Compensation>; update: (id: number, input: CompensationInput) => Promise<Compensation>; delete: (id: number) => Promise<void>; }; importSeedData: () => Promise<{ inserted: number; skipped: number }>; }
