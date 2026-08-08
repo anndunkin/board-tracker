@@ -33,10 +33,13 @@ tracking.
 
 ## Data model (initial)
 
-- **Companies** — name, business summary, sector, website, notes.
+- **Companies** — name, business summary, sector, website, board_size
+  (nullable int), other_board_members (free text or linked list of names),
+  meeting_cadence (e.g. monthly/quarterly/ad hoc), notes.
 - **Positions** — company_id, status (current / former / potential),
   position_type (governing board / advisory board / advisor), start date,
-  end date (nullable), notes.
+  end date (nullable), expected_decision_date (nullable, used when status =
+  potential), notes.
 - **Compensation** — position_id, type (cash / non-cash), amount/currency
   (cash) OR instrument_type + quantity + strike/grant price (non-cash),
   grant_date.
@@ -60,8 +63,10 @@ tracking.
   Manager conventions (main/preload/renderer split, `sandbox: true`).
 - Core tables: Companies, Positions, Compensation (cash only), Instrument
   Types (seeded list, editable).
-- Basic CRUD UI: add/edit/list companies and positions, dashboard view
-  (current / former / potential counts).
+- Basic CRUD UI: add/edit/list companies (incl. board size, other board
+  members, meeting cadence) and positions (incl. expected decision date for
+  potential positions), dashboard view (current / former / potential
+  counts, upcoming decision dates).
 - Import company + business-summary seed data from the existing spreadsheet.
 - Packaged, signed (Dunkin Global Advisors self-signed cert, same as other
   apps) Windows NSIS installer.
@@ -116,9 +121,7 @@ tracking.
 - `sandbox: true`, context-bridge IPC, main process owns all filesystem/DB
   access — no direct renderer file access.
 
-## Open items to confirm before v0.1.0 starts
+## Confirmed field additions
 
-- Any specific fields you want in the Companies table beyond name/summary/
-  sector/website (e.g. board size, other board members, meeting cadence)?
-- Should "potential" positions have any special fields (e.g. probability,
-  expected decision date) or just reuse the same schema as current/former?
+- Companies: board_size, other_board_members, meeting_cadence.
+- Positions: expected_decision_date (used for potential positions).
