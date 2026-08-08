@@ -1,6 +1,6 @@
-import type { CompensationInput, CompanyInput, InstrumentTypeInput, PositionInput, VestingScheduleInput } from '../shared/types';
+import type { CompensationInput, CompanyInput, DocumentInput, InstrumentTypeInput, PositionInput, VestingScheduleInput } from '../shared/types';
 export class ValidationError extends Error { constructor(message: string) { super(message); this.name = 'ValidationError'; } }
-const lengths = { name: 200, sector: 150, website: 2048, summary: 10000, members: 5000, cadence: 100, notes: 10000, currency: 3, instrumentName: 100, description: 2000 };
+const lengths = { name: 200, sector: 150, website: 2048, summary: 10000, members: 5000, cadence: 100, notes: 10000, currency: 3, instrumentName: 100, description: 2000, documentType: 100, filePath: 32767, fileName: 1024, documentDescription: 10000 };
 const nullableText = (value: unknown, field: string, max: number): string | null => { if (value == null) return null; if (typeof value !== 'string') throw new ValidationError(`${field} must be text.`); const clean = value.trim(); if (clean.length > max) throw new ValidationError(`${field} must be ${max} characters or fewer.`); return clean || null; };
 const requiredText = (value: unknown, field: string, max: number): string => { const clean = nullableText(value, field, max); if (!clean) throw new ValidationError(`${field} is required.`); return clean; };
 export const validDate = (value: unknown, field: string): string | null => { if (value == null || value === '') return null; if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new ValidationError(`${field} must be a valid YYYY-MM-DD date.`); const parsed = new Date(`${value}T00:00:00Z`); if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw new ValidationError(`${field} must be a valid calendar date.`); return value; };
@@ -45,4 +45,19 @@ export function validateVestingSchedule(input: VestingScheduleInput): { compensa
   }
   if ((input.schedule_type === 'milestone' || input.schedule_type === 'custom') && !notes) throw new ValidationError('Vesting notes are required for milestone and custom schedules.');
   return { compensation_id, schedule_type: input.schedule_type, cliff_date: null, vesting_start: null, vesting_end: null, cadence: null, notes: input.schedule_type === 'immediate' ? null : notes };
+}
+
+export function validateDocument(input: DocumentInput): { company_id: number; position_id: number | null; compensation_id: number | null; document_type: string; file_path: string | null; file_name: string | null; description: string | null; document_date: string | null; status: 'linked' | 'missing'; } {
+  const company_id = positiveId(input.company_id, 'Company');
+  const position_id = input.position_id == null || input.position_id === ('' as never) ? null : positiveId(input.position_id, 'Position');
+  const compensation_id = input.compensation_id == null || input.compensation_id === ('' as never) ? null : positiveId(input.compensation_id, 'Compensation');
+  const document_type = requiredText(input.document_type, 'Document type', lengths.documentType);
+  if (!['linked', 'missing'].includes(input.status)) throw new ValidationError('Document status is invalid.');
+  const file_path = nullableText(input.file_path, 'File path', lengths.filePath);
+  const file_name = nullableText(input.file_name, 'File name', lengths.fileName);
+  const description = nullableText(input.description, 'Document description', lengths.documentDescription);
+  const document_date = validDate(input.document_date, 'Document date');
+  if (input.status === 'linked') { if (!file_path) throw new ValidationError('File path is required for a linked document.'); if (!file_name) throw new ValidationError('File name is required for a linked document.'); return { company_id, position_id, compensation_id, document_type, file_path, file_name, description, document_date, status: 'linked' }; }
+  if (file_path) throw new ValidationError('File path must be empty for a missing document.');
+  return { company_id, position_id, compensation_id, document_type, file_path: null, file_name: null, description, document_date, status: 'missing' };
 }

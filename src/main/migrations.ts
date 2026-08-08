@@ -14,6 +14,11 @@ const migrations = [
  CREATE INDEX IF NOT EXISTS idx_compensation_instrument_type ON compensation(instrument_type_id);
  ALTER TABLE instrument_types ADD COLUMN description TEXT;`,
 `CREATE TABLE IF NOT EXISTS vesting_schedules (id INTEGER PRIMARY KEY, compensation_id INTEGER NOT NULL, schedule_type TEXT NOT NULL CHECK(schedule_type IN ('immediate','cliff_linear','milestone','custom')), cliff_date TEXT, vesting_start TEXT, vesting_end TEXT, cadence TEXT CHECK(cadence IS NULL OR cadence IN ('monthly','quarterly','annual','one_time')), notes TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(compensation_id) REFERENCES compensation(id) ON DELETE CASCADE);
- CREATE INDEX IF NOT EXISTS idx_vesting_schedules_compensation ON vesting_schedules(compensation_id);`
+ CREATE INDEX IF NOT EXISTS idx_vesting_schedules_compensation ON vesting_schedules(compensation_id);`,
+`CREATE TABLE IF NOT EXISTS documents (id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL, position_id INTEGER, compensation_id INTEGER, document_type TEXT NOT NULL, file_path TEXT, file_name TEXT, description TEXT, document_date TEXT, status TEXT NOT NULL CHECK(status IN ('linked','missing')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE, FOREIGN KEY(position_id) REFERENCES positions(id) ON DELETE SET NULL, FOREIGN KEY(compensation_id) REFERENCES compensation(id) ON DELETE SET NULL, CHECK((status='linked' AND file_path IS NOT NULL) OR (status='missing' AND file_path IS NULL)));
+ CREATE INDEX IF NOT EXISTS idx_documents_company ON documents(company_id);
+ CREATE INDEX IF NOT EXISTS idx_documents_position ON documents(position_id);
+ CREATE INDEX IF NOT EXISTS idx_documents_compensation ON documents(compensation_id);
+ CREATE INDEX IF NOT EXISTS idx_documents_status_company ON documents(status, company_id);`
 ];
 export function runMigrations(db: Database.Database): void { db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'); const applied = new Set((db.prepare('SELECT version FROM schema_version').all() as { version: number }[]).map((row) => row.version)); migrations.forEach((sql, index) => { const version = index + 1; if (!applied.has(version)) db.transaction(() => { db.exec(sql); db.prepare('INSERT INTO schema_version(version) VALUES (?)').run(version); })(); }); }

@@ -4,6 +4,7 @@ export type CompensationType = 'cash' | 'non_cash';
 export type CompensationFrequency = 'one_time' | 'annual' | 'quarterly' | 'monthly' | 'per_meeting';
 export type VestingScheduleType = 'immediate' | 'cliff_linear' | 'milestone' | 'custom';
 export type VestingCadence = 'monthly' | 'quarterly' | 'annual' | 'one_time';
+export type DocumentStatus = 'linked' | 'missing';
 
 export interface CompanyInput { name: string; business_summary?: string | null; sector?: string | null; website?: string | null; board_size?: number | null; other_board_members?: string | null; meeting_cadence?: string | null; notes?: string | null; }
 export interface Company extends Required<Omit<CompanyInput, 'board_size'>> { id: number; board_size: number | null; created_at: string; updated_at: string; position_count?: number; }
@@ -21,9 +22,13 @@ export interface VestingScheduleInput { compensation_id: number; schedule_type: 
 export interface VestingSchedule extends Omit<VestingScheduleInput, 'cliff_date' | 'vesting_start' | 'vesting_end' | 'cadence' | 'notes'> { id: number; cliff_date: string | null; vesting_start: string | null; vesting_end: string | null; cadence: VestingCadence | null; notes: string | null; created_at: string; updated_at: string; }
 
 export interface VestingSummary { kind: 'percentage' | 'not_calculable'; percentage?: number; text: string; }
-export interface CompanyDetail extends Company { positions: Array<Position & { compensation: Compensation[] }>; }
+export interface DocumentInput { company_id: number; position_id?: number | null; compensation_id?: number | null; document_type: string; file_path?: string | null; file_name?: string | null; description?: string | null; document_date?: string | null; status: DocumentStatus; }
+export interface Document extends Omit<DocumentInput, 'position_id' | 'compensation_id' | 'file_path' | 'file_name' | 'description' | 'document_date'> { id: number; position_id: number | null; compensation_id: number | null; file_path: string | null; file_name: string | null; description: string | null; document_date: string | null; created_at: string; updated_at: string; position_status?: PositionStatus | null; position_type?: PositionType | null; compensation_type?: CompensationType | null; compensation_quantity?: number | null; instrument_type_name?: string | null; }
+export interface CompanyDetail extends Company { positions: Array<Position & { compensation: Compensation[] }>; documents: Document[]; }
 export interface UpcomingVesting extends VestingSchedule { company_id: number; company_name: string; position_id: number; quantity: number | null; instrument_type_name: string | null; vesting_summary: VestingSummary; }
-export interface DashboardData { counts: Record<PositionStatus, number>; upcoming: Array<Position & { company_name: string }>; upcoming_vesting: UpcomingVesting[]; }
+export interface MissingDocument extends Document { company_name: string; }
+export interface DashboardData { counts: Record<PositionStatus, number>; upcoming: Array<Position & { company_name: string }>; upcoming_vesting: UpcomingVesting[]; missing_documents: MissingDocument[]; }
+export interface DocumentOpenResult { ok: boolean; error?: string; }
 
 export interface BoardTrackerApi {
   dashboard: () => Promise<DashboardData>;
@@ -32,5 +37,6 @@ export interface BoardTrackerApi {
   compensation: { create: (input: CompensationInput) => Promise<Compensation>; update: (id: number, input: CompensationInput) => Promise<Compensation>; delete: (id: number) => Promise<void>; };
   instrumentTypes: { list: () => Promise<InstrumentType[]>; create: (input: InstrumentTypeInput) => Promise<InstrumentType>; update: (id: number, input: InstrumentTypeInput) => Promise<InstrumentType>; delete: (id: number) => Promise<void>; };
   vestingSchedules: { create: (input: VestingScheduleInput) => Promise<VestingSchedule>; update: (id: number, input: VestingScheduleInput) => Promise<VestingSchedule>; delete: (id: number) => Promise<void>; };
+  documents: { create: (input: DocumentInput) => Promise<Document>; update: (id: number, input: DocumentInput) => Promise<Document>; delete: (id: number) => Promise<void>; pickFile: () => Promise<string | null>; open: (filePath: string) => Promise<DocumentOpenResult>; };
   importSeedData: () => Promise<{ inserted: number; skipped: number }>;
 }

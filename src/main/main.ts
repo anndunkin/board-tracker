@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { BoardTrackerDatabase } from './database';
@@ -13,6 +13,9 @@ function registerHandlers(): void {
   ipcMain.handle('compensation:create', (_e, input) => database.createCompensation(input)); ipcMain.handle('compensation:update', (_e, id, input) => database.updateCompensation(id, input)); ipcMain.handle('compensation:delete', (_e, id) => database.deleteCompensation(id));
   ipcMain.handle('instrument-types:list', () => database.listInstrumentTypes()); ipcMain.handle('instrument-types:create', (_e, input) => database.createInstrumentType(input)); ipcMain.handle('instrument-types:update', (_e, id, input) => database.updateInstrumentType(id, input)); ipcMain.handle('instrument-types:delete', (_e, id) => database.deleteInstrumentType(id));
   ipcMain.handle('vesting-schedules:create', (_e, input) => database.createVestingSchedule(input)); ipcMain.handle('vesting-schedules:update', (_e, id, input) => database.updateVestingSchedule(id, input)); ipcMain.handle('vesting-schedules:delete', (_e, id) => database.deleteVestingSchedule(id));
+  ipcMain.handle('documents:create', (_e, input) => database.createDocument(input)); ipcMain.handle('documents:update', (_e, id, input) => database.updateDocument(id, input)); ipcMain.handle('documents:delete', (_e, id) => database.deleteDocument(id));
+  ipcMain.handle('documents:pick-file', async (event) => { const parent = BrowserWindow.fromWebContents(event.sender); const result = parent ? await dialog.showOpenDialog(parent, { properties: ['openFile'] }) : await dialog.showOpenDialog({ properties: ['openFile'] }); return result.canceled ? null : result.filePaths[0] ?? null; });
+  ipcMain.handle('documents:open', async (_e, filePath: unknown) => { if (typeof filePath !== 'string' || !filePath.trim()) throw new Error('File path is required.'); const error = await shell.openPath(filePath); return error ? { ok: false, error } : { ok: true }; });
   ipcMain.handle('seed:import', () => importSeedData());
 }
 app.whenReady().then(() => { database = new BoardTrackerDatabase(path.join(app.getPath('userData'), 'board-tracker.db')); registerHandlers(); importSeedData(); Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'File', submenu: [{ label: 'Import Seed Data', click: () => { importSeedData(); BrowserWindow.getAllWindows().forEach((window) => window.webContents.send('seed-imported')); } }, { role: 'quit' }] }, { label: 'View', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }] }])); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); });

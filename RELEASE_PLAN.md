@@ -83,7 +83,7 @@ tracking.
 - Expanded test suite for new tables/boundaries.
 - `v0.2.0` release.
 
-### v0.3.0 — Document linking
+### v0.3.0 — Document linking (Delivered)
 - Documents table + UI: link a document to a company/position, pick
   doc_type, open via system default handler.
 - Missing Document Flags: manually flag/track expected-but-absent documents

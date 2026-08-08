@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0] — 2026-08-08
+
+### Added
+- Linked document records for company-level, position-specific, and compensation-specific agreements, with safe file selection and opening through the operating system's default application. Files remain in their original locations and are never copied or deleted by Board Tracker.
+- Editable document metadata, including a curated common-type menu with custom types, display names, descriptions, and document dates.
+- Missing-document placeholders that can later be updated in place to attach the received file, plus an overview list sorted by company and prominent attach-file actions in company records.
+- Broken-link recovery actions that let you re-link a moved file or mark the record as missing.
+- Versioned migration for document references, including company-delete cascade and retained document metadata when a linked position or compensation record is removed.
+
 ## [0.2.1] — 2026-08-08
 
 ### Fixed
