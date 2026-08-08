@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1] — 2026-08-08
+
+### Fixed
+- Non-cash compensation could not be saved when the default vesting schedule type ("Immediate") was selected. The form submitted empty strings for cliff date, vesting start, vesting end, and cadence fields that are intentionally hidden for that schedule type, and the backend validator rejected an empty string as an invalid cadence value — blocking every non-cash save by default. The form now sends `null` for fields it doesn't render, and the validator now also normalizes an empty string to `null` for defense in depth. Added a regression test covering this exact form-submission shape.
+
 ## [0.2.0] — 2026-08-08
 
 ### Added

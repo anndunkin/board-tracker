@@ -11,3 +11,4 @@ certs/
 *.pfx
 *.key
 *.crt
+dist_release/

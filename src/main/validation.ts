@@ -32,7 +32,8 @@ export function validateCompensation(input: CompensationInput): { position_id: n
 export function validateVestingSchedule(input: VestingScheduleInput): { compensation_id: number; schedule_type: VestingScheduleInput['schedule_type']; cliff_date: string | null; vesting_start: string | null; vesting_end: string | null; cadence: VestingScheduleInput['cadence']; notes: string | null; } {
   const compensation_id = positiveId(input.compensation_id, 'Compensation');
   if (!['immediate', 'cliff_linear', 'milestone', 'custom'].includes(input.schedule_type)) throw new ValidationError('Vesting schedule type is invalid.');
-  if (input.cadence != null && !['monthly', 'quarterly', 'annual', 'one_time'].includes(input.cadence)) throw new ValidationError('Vesting cadence is invalid.');
+  const cadenceInput = (input.cadence as unknown) === '' ? null : input.cadence;
+  if (cadenceInput != null && !['monthly', 'quarterly', 'annual', 'one_time'].includes(cadenceInput)) throw new ValidationError('Vesting cadence is invalid.');
   const cliff_date = validDate(input.cliff_date, 'Cliff date');
   const vesting_start = validDate(input.vesting_start, 'Vesting start');
   const vesting_end = validDate(input.vesting_end, 'Vesting end');
@@ -40,7 +41,7 @@ export function validateVestingSchedule(input: VestingScheduleInput): { compensa
   if (input.schedule_type === 'cliff_linear') {
     if (!cliff_date || !vesting_start || !vesting_end) throw new ValidationError('Cliff date, vesting start, and vesting end are required for a cliff and linear schedule.');
     if (vesting_start > cliff_date || cliff_date > vesting_end) throw new ValidationError('Vesting dates must be ordered start, cliff, then end.');
-    return { compensation_id, schedule_type: input.schedule_type, cliff_date, vesting_start, vesting_end, cadence: input.cadence ?? null, notes };
+    return { compensation_id, schedule_type: input.schedule_type, cliff_date, vesting_start, vesting_end, cadence: cadenceInput ?? null, notes };
   }
   if ((input.schedule_type === 'milestone' || input.schedule_type === 'custom') && !notes) throw new ValidationError('Vesting notes are required for milestone and custom schedules.');
   return { compensation_id, schedule_type: input.schedule_type, cliff_date: null, vesting_start: null, vesting_end: null, cadence: null, notes: input.schedule_type === 'immediate' ? null : notes };

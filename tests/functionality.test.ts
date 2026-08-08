@@ -41,6 +41,12 @@ describe('functionality: non-cash compensation and vesting', () => {
     db.deleteVestingSchedule(schedule.id); expect(db.getCompany(company.id)?.positions[0].compensation[0].active_vesting_schedule).toBeNull();
   });
   it('keeps only the most recent vesting schedule active and clears schedules when changed to cash', () => { const company = db.createCompany(companyInput()); const position = db.createPosition(positionInput(company.id)); const stock = db.listInstrumentTypes().find((item) => item.name === 'Stock')!; const compensation = db.createCompensation(nonCashInput(position.id, stock.id)); db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'custom', notes: 'Original award' }); const newer = db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'immediate' }); expect(db.getCompany(company.id)?.positions[0].compensation[0].active_vesting_schedule?.id).toBe(newer.id); db.updateCompensation(compensation.id, { position_id: position.id, type: 'cash', amount: 50, currency: 'USD', frequency: 'monthly' }); expect(db.db.prepare('SELECT COUNT(*) FROM vesting_schedules WHERE compensation_id=?').pluck().get(compensation.id)).toBe(0); });
+  it('regression: saves an immediate vesting schedule when the form sends empty strings instead of nulls for unrendered fields (bug reported in v0.2.0 - the UI never showed cliff/start/end/cadence fields for "Immediate", but still submitted them as empty strings, which failed enum validation and silently blocked every non-cash save since Immediate is the default schedule type)', () => {
+    const company = db.createCompany(companyInput()); const position = db.createPosition(positionInput(company.id)); const stock = db.listInstrumentTypes().find((item) => item.name === 'Stock')!;
+    const compensation = db.createCompensation(nonCashInput(position.id, stock.id));
+    const schedule = db.createVestingSchedule({ compensation_id: compensation.id, schedule_type: 'immediate', cliff_date: '' as any, vesting_start: '' as any, vesting_end: '' as any, cadence: '' as any, notes: '' as any });
+    expect(schedule).toMatchObject({ schedule_type: 'immediate', cliff_date: null, vesting_start: null, vesting_end: null, cadence: null, notes: null });
+  });
 });
 
 describe('functionality: instrument types, seed import, and dashboard', () => {
