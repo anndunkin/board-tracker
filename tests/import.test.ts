@@ -489,7 +489,8 @@ describe('import: unknown fields are kept, never silently dropped', () => {
     expect(payload(detail.id, 'companies')).toEqual({ dba: 'ArmorxAI', governing_law: 'Delaware' });
     expect(payload(detail.positions[0].id, 'positions')).toEqual({ title: 'Advisory Board Member', time_commitment: '2 hours per month' });
     expect(payload(detail.positions[0].compensation[0].id, 'compensation')).toEqual({ security_class: 'Common Stock', reference_valuation_per_share: 0.07 });
-    expect(payload(detail.positions[0].compensation[0].active_vesting_schedule!.id, 'vesting_schedules')).toEqual({ cliff_fraction: '1/4', total_vesting_months: 48 });
+    // total_vesting_months is now a recognised alias for duration_months, so only cliff_fraction is unmapped.
+    expect(payload(detail.positions[0].compensation[0].active_vesting_schedule!.id, 'vesting_schedules')).toEqual({ cliff_fraction: '1/4' });
   });
 
   it('names them and shows their values in the review plan before anything is committed', () => {
@@ -568,10 +569,11 @@ describe('import: the ArmorxAI extraction that v0.4.1 could not read', () => {
     // percent-vested figure is computed from.
     expect(grant).toMatchObject({ type: 'non_cash', quantity: 65010, instrument_type_name: 'non-statutory stock option' });
     expect(grant.active_vesting_schedule).toMatchObject({ schedule_type: 'cliff_linear', vesting_start: '2026-03-09', cliff_date: '2027-03-09', cadence: 'monthly' });
-    // The file states total_vesting_months: 48 but no vesting_end, and the schema has no field for a
-    // duration, so the percentage stays uncalculable rather than being back-derived. The 48 is kept.
-    expect(grant.vesting_summary).toMatchObject({ kind: 'not_calculable' });
-    expect(JSON.parse(db.db.prepare('SELECT extracted_data_json FROM vesting_schedules WHERE compensation_id=?').pluck().get(grant.id) as string).unmapped_fields).toMatchObject({ total_vesting_months: 48, cliff_fraction: '1/4' });
+    // The file states total_vesting_months: 48 and no vesting_end. v0.5.0 could not use that and left
+    // percent vested uncalculable; v0.6.0 reads it as the vesting term and works the end date out.
+    expect(grant.active_vesting_schedule).toMatchObject({ duration_months: 48, vesting_end: null, effective_vesting_end: '2030-03-09', vesting_end_is_derived: true });
+    expect(grant.vesting_summary?.kind).toBe('percentage');
+    expect(JSON.parse(db.db.prepare('SELECT extracted_data_json FROM vesting_schedules WHERE compensation_id=?').pluck().get(grant.id) as string).unmapped_fields).toMatchObject({ cliff_fraction: '1/4' });
     const kept = plan.warnings.filter((warning) => warning.kind === 'unmapped');
     expect(kept.length).toBeGreaterThan(3);
     expect(db.db.prepare('SELECT COUNT(*) FROM documents').pluck().get()).toBe(5);

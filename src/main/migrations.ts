@@ -38,6 +38,9 @@ const migrations = [
 // agreement that still says "Kapalya Inc." would silently create a second company.
 `CREATE TABLE IF NOT EXISTS company_aliases (id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL, name TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('rename','manual')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE);
  CREATE UNIQUE INDEX IF NOT EXISTS idx_company_aliases_name ON company_aliases(name COLLATE NOCASE);
- CREATE INDEX IF NOT EXISTS idx_company_aliases_company ON company_aliases(company_id);`
+ CREATE INDEX IF NOT EXISTS idx_company_aliases_company ON company_aliases(company_id);`,
+// 9 — how long the award vests over. Agreements routinely state a term ("vesting over 48 months")
+// without ever naming an end date, and percent-vested was uncomputable for every one of them.
+`ALTER TABLE vesting_schedules ADD COLUMN duration_months INTEGER;`
 ];
 export function runMigrations(db: Database.Database): void { db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'); const applied = new Set((db.prepare('SELECT version FROM schema_version').all() as { version: number }[]).map((row) => row.version)); migrations.forEach((sql, index) => { const version = index + 1; if (!applied.has(version)) db.transaction(() => { db.exec(sql); db.prepare('INSERT INTO schema_version(version) VALUES (?)').run(version); })(); }); }

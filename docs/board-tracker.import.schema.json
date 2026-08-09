@@ -325,7 +325,16 @@
                               "null"
                             ],
                             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                            "description": "Date the grant is fully vested. Format YYYY-MM-DD."
+                            "description": "Date the grant is fully vested. Give this when the agreement states it. Format YYYY-MM-DD."
+                          },
+                          "duration_months": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 600,
+                            "description": "Total vesting term in months, when the agreement gives a term rather than an end date (\"vesting over 48 months\" is 48). Give vesting_end or duration_months — either one lets Board Tracker compute percent vested. If the agreement gives both, send both."
                           },
                           "cadence": {
                             "type": [
@@ -346,7 +355,7 @@
                               "string",
                               "null"
                             ],
-                            "description": "Cliff fraction, per-period fraction, total term, forfeiture and acceleration terms, and any conditions.",
+                            "description": "Cliff fraction, per-period fraction, forfeiture and acceleration terms, and any conditions.",
                             "maxLength": 10000
                           }
                         }

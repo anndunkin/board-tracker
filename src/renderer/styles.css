@@ -73,3 +73,5 @@
 .research-prompt:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
 .research-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .research-saved{margin:12px 0 0;color:var(--muted);font-size:var(--text-xs);word-break:break-all}
+.field-hint{margin:-6px 0 2px;color:var(--muted);font-size:var(--text-xs);line-height:1.5}
+.derived-note{padding:0 16px 14px;color:var(--muted);font-size:var(--text-xs)}

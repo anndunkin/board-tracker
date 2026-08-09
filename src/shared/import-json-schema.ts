@@ -30,9 +30,10 @@ const vesting = {
     schedule_type: enumOf(scheduleTypes, 'Pick the closest listed value. A cliff followed by periodic vesting is "cliff_linear".'),
     vesting_start: isoDate('The vesting commencement date. Required for any percent-vested calculation to work.'),
     cliff_date: isoDate('Date the cliff portion vests.'),
-    vesting_end: isoDate('Date the grant is fully vested.'),
+    vesting_end: isoDate('Date the grant is fully vested. Give this when the agreement states it.'),
+    duration_months: { type: ['integer', 'null'], minimum: 1, maximum: 600, description: 'Total vesting term in months, when the agreement gives a term rather than an end date ("vesting over 48 months" is 48). Give vesting_end or duration_months — either one lets Board Tracker compute percent vested. If the agreement gives both, send both.' },
     cadence: { type: ['string', 'null'], enum: [...cadences, null], description: 'How often the post-cliff portion vests.' },
-    notes: nullableStr('Cliff fraction, per-period fraction, total term, forfeiture and acceleration terms, and any conditions.', 10000),
+    notes: nullableStr('Cliff fraction, per-period fraction, forfeiture and acceleration terms, and any conditions.', 10000),
   },
 };
 

@@ -1,3 +1,4 @@
+import { addMonths } from './vesting';
 import type { CompensationInput, CompanyInput, DocumentInput, InstrumentTypeInput, PositionInput, VestingScheduleInput } from '../shared/types';
 export class ValidationError extends Error { constructor(message: string) { super(message); this.name = 'ValidationError'; } }
 const lengths = { name: 200, sector: 150, website: 2048, summary: 10000, members: 5000, cadence: 100, notes: 10000, currency: 3, instrumentName: 100, description: 2000, documentType: 100, filePath: 32767, fileName: 1024, documentDescription: 10000 };
@@ -29,7 +30,17 @@ export function validateCompensation(input: CompensationInput): { position_id: n
   return { position_id, type, amount: null, currency: null, frequency: null, instrument_type_id, quantity, grant_price: nullableNumber(input.grant_price, 'Grant price', 0, 1_000_000_000_000), grant_date: validDate(input.grant_date, 'Grant date'), notes };
 }
 
-export function validateVestingSchedule(input: VestingScheduleInput): { compensation_id: number; schedule_type: VestingScheduleInput['schedule_type']; cliff_date: string | null; vesting_start: string | null; vesting_end: string | null; cadence: VestingScheduleInput['cadence']; notes: string | null; } {
+/** A vesting term is a whole number of months. Ten years is generous headroom for a real award. */
+export function validDurationMonths(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const months = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isFinite(months)) throw new ValidationError('Vesting term must be a number of months.');
+  if (!Number.isInteger(months)) throw new ValidationError('Vesting term must be a whole number of months.');
+  if (months < 1 || months > 600) throw new ValidationError('Vesting term must be between 1 and 600 months.');
+  return months;
+}
+
+export function validateVestingSchedule(input: VestingScheduleInput): { compensation_id: number; schedule_type: VestingScheduleInput['schedule_type']; cliff_date: string | null; vesting_start: string | null; vesting_end: string | null; duration_months: number | null; cadence: VestingScheduleInput['cadence']; notes: string | null; } {
   const compensation_id = positiveId(input.compensation_id, 'Compensation');
   if (!['immediate', 'cliff_linear', 'milestone', 'custom'].includes(input.schedule_type)) throw new ValidationError('Vesting schedule type is invalid.');
   const cadenceInput = (input.cadence as unknown) === '' ? null : input.cadence;
@@ -38,13 +49,20 @@ export function validateVestingSchedule(input: VestingScheduleInput): { compensa
   const vesting_start = validDate(input.vesting_start, 'Vesting start');
   const vesting_end = validDate(input.vesting_end, 'Vesting end');
   const notes = nullableText(input.notes, 'Vesting notes', lengths.notes);
+  const duration_months = validDurationMonths(input.duration_months);
   if (input.schedule_type === 'cliff_linear') {
-    if (!cliff_date || !vesting_start || !vesting_end) throw new ValidationError('Cliff date, vesting start, and vesting end are required for a cliff and linear schedule.');
-    if (vesting_start > cliff_date || cliff_date > vesting_end) throw new ValidationError('Vesting dates must be ordered start, cliff, then end.');
-    return { compensation_id, schedule_type: input.schedule_type, cliff_date, vesting_start, vesting_end, cadence: cadenceInput ?? null, notes };
+    // An agreement gives you either an end date or a term. Requiring both would have made most
+    // real awards unrecordable; requiring neither would make percent vested a guess.
+    if (!cliff_date || !vesting_start) throw new ValidationError('Cliff date and vesting start are required for a cliff and linear schedule.');
+    if (!vesting_end && duration_months == null) throw new ValidationError('Give a vesting end date or a vesting term in months for a cliff and linear schedule.');
+    if (vesting_start > cliff_date) throw new ValidationError('Vesting dates must be ordered start, cliff, then end.');
+    const end = vesting_end ?? addMonths(vesting_start, duration_months as number);
+    if (!end || cliff_date > end) throw new ValidationError('Vesting dates must be ordered start, cliff, then end.');
+    if (end <= vesting_start) throw new ValidationError('Vesting must end after it starts.');
+    return { compensation_id, schedule_type: input.schedule_type, cliff_date, vesting_start, vesting_end, duration_months, cadence: cadenceInput ?? null, notes };
   }
   if ((input.schedule_type === 'milestone' || input.schedule_type === 'custom') && !notes) throw new ValidationError('Vesting notes are required for milestone and custom schedules.');
-  return { compensation_id, schedule_type: input.schedule_type, cliff_date: null, vesting_start: null, vesting_end: null, cadence: null, notes: input.schedule_type === 'immediate' ? null : notes };
+  return { compensation_id, schedule_type: input.schedule_type, cliff_date: null, vesting_start: null, vesting_end: null, duration_months: null, cadence: null, notes: input.schedule_type === 'immediate' ? null : notes };
 }
 
 export function validateDocument(input: DocumentInput): { company_id: number; position_id: number | null; compensation_id: number | null; document_type: string; file_path: string | null; file_name: string | null; description: string | null; document_date: string | null; status: 'linked' | 'missing'; } {

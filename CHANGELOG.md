@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.6.0] — 2026-08-09
+
+Most board agreements state a vesting term rather than a completion date — "vesting over 48 months
+from the commencement date" and nothing else. Board Tracker had no field for that, so those grants
+sat on the dashboard reading "not calculable" even though the end date was fully determined. It now
+records the term and works the date out.
+
+### Added
+- **Vesting term in months.** Cliff-and-linear schedules take either a vesting end date or a term,
+  whichever the agreement gives. With a term, the end date is computed from the vesting start using
+  whole-month arithmetic that clamps to the last day of the month, so a grant starting on the 31st
+  does not slide into the following month.
+- Percent vested, the upcoming-vesting list, and the company record all use the computed date. Where
+  the date was worked out rather than stated, the app says so — an asterisked footnote on the
+  dashboard and "from a 48-month term" on the compensation row.
+- The importer reads `duration_months`, and accepts `total_vesting_months`, `vesting_months`,
+  `total_months`, and `vesting_term_months` as aliases. The published JSON Schema and the extraction
+  prompt both describe the field, so a fresh extraction fills it in.
+
+### Changed
+- A cliff-and-linear schedule now requires a vesting start, a cliff date, and **one** of an end date
+  or a term. Previously it demanded an end date, which is the thing many agreements never state.
+- If a file supplies both an end date and a term and they disagree, the stated end date wins. The
+  app reports what the agreement says rather than its own arithmetic.
+
+### Fixed
+- The ArmorX.ai grant that motivated this — 65,010 options, one-year cliff, 48-month term, no end
+  date — now reports a real percentage instead of "not calculable", and its `total_vesting_months`
+  is a recorded field rather than an unmapped leftover.
+
+### Database
+- Migration 9 adds `duration_months` to `vesting_schedules`. Existing databases upgrade in place.
+
 ## [0.5.0] — 2026-08-09
 
 Two changes that turn out to be one change. Renaming a company was impossible without breaking

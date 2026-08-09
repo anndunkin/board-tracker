@@ -84,15 +84,15 @@ class ImportRun {
   private vesting(vesting: ImportVestingNode, compensationId: number, key: string, context: string): void {
     const label = `Vesting — ${titleCase(vesting.schedule_type)}`;
     const existing = this.db.prepare('SELECT * FROM vesting_schedules WHERE compensation_id=? ORDER BY id DESC LIMIT 1').get(compensationId) as Record<string, unknown> | undefined;
-    const incoming = { schedule_type: vesting.schedule_type, cliff_date: vesting.cliff_date, vesting_start: vesting.vesting_start, vesting_end: vesting.vesting_end, cadence: vesting.cadence, notes: vesting.notes };
+    const incoming = { schedule_type: vesting.schedule_type, cliff_date: vesting.cliff_date, vesting_start: vesting.vesting_start, vesting_end: vesting.vesting_end, duration_months: vesting.duration_months, cadence: vesting.cadence, notes: vesting.notes };
     if (!existing) {
       if (!this.record({ key, kind: 'vesting', action: 'create', context, label, changes: Object.entries(incoming).filter(([, to]) => !blank(to)).map(([field, to]) => ({ field, from: null, to: String(to), overwrite: false })), reason: 'New vesting schedule.' })) return;
-      this.db.prepare('INSERT INTO vesting_schedules(compensation_id,schedule_type,cliff_date,vesting_start,vesting_end,cadence,notes,extracted_data_json) VALUES (?,?,?,?,?,?,?,?)').run(compensationId, vesting.schedule_type, vesting.cliff_date, vesting.vesting_start, vesting.vesting_end, vesting.cadence, vesting.notes, vesting.extracted_data_json);
+      this.db.prepare('INSERT INTO vesting_schedules(compensation_id,schedule_type,cliff_date,vesting_start,vesting_end,duration_months,cadence,notes,extracted_data_json) VALUES (?,?,?,?,?,?,?,?,?)').run(compensationId, vesting.schedule_type, vesting.cliff_date, vesting.vesting_start, vesting.vesting_end, vesting.duration_months, vesting.cadence, vesting.notes, vesting.extracted_data_json);
       return;
     }
     const verdict = classify(existing, incoming);
     if (!this.record({ key, kind: 'vesting', action: verdict.action, context, label, changes: verdict.changes, reason: verdict.reason })) return;
-    this.db.prepare('UPDATE vesting_schedules SET schedule_type=?,cliff_date=COALESCE(?,cliff_date),vesting_start=COALESCE(?,vesting_start),vesting_end=COALESCE(?,vesting_end),cadence=COALESCE(?,cadence),notes=COALESCE(?,notes),extracted_data_json=COALESCE(?,extracted_data_json),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(vesting.schedule_type, vesting.cliff_date, vesting.vesting_start, vesting.vesting_end, vesting.cadence, vesting.notes, vesting.extracted_data_json, existing.id as number);
+    this.db.prepare('UPDATE vesting_schedules SET schedule_type=?,cliff_date=COALESCE(?,cliff_date),vesting_start=COALESCE(?,vesting_start),vesting_end=COALESCE(?,vesting_end),duration_months=COALESCE(?,duration_months),cadence=COALESCE(?,cadence),notes=COALESCE(?,notes),extracted_data_json=COALESCE(?,extracted_data_json),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(vesting.schedule_type, vesting.cliff_date, vesting.vesting_start, vesting.vesting_end, vesting.duration_months, vesting.cadence, vesting.notes, vesting.extracted_data_json, existing.id as number);
   }
 
   private compensation(comp: ImportCompensationNode, companyId: number, positionId: number, key: string, context: string): void {

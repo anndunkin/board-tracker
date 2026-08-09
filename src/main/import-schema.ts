@@ -20,7 +20,7 @@ const companyAliases: Record<string, string> = { company_name: 'name' };
 const companyFieldKeys = ['business_summary', 'sector', 'website', 'board_size', 'other_board_members', 'meeting_cadence', 'notes'];
 const positionAliases: Record<string, string> = { position_status: 'status', role_type: 'position_type' };
 const compensationAliases: Record<string, string> = { compensation_type: 'type', instrument: 'instrument_type', instrument_name: 'instrument_type', exercise_price: 'grant_price', shares: 'quantity' };
-const vestingAliases: Record<string, string> = { vesting_type: 'schedule_type', commencement_date: 'vesting_start', vesting_commencement_date: 'vesting_start', start_date: 'vesting_start', end_date: 'vesting_end', post_cliff_period: 'cadence', vesting_cadence: 'cadence' };
+const vestingAliases: Record<string, string> = { total_vesting_months: 'duration_months', vesting_months: 'duration_months', total_months: 'duration_months', vesting_term_months: 'duration_months', vesting_type: 'schedule_type', commencement_date: 'vesting_start', vesting_commencement_date: 'vesting_start', start_date: 'vesting_start', end_date: 'vesting_end', post_cliff_period: 'cadence', vesting_cadence: 'cadence' };
 const documentAliases: Record<string, string> = { path: 'file_path', name: 'file_name', filename: 'file_name', date: 'document_date' };
 
 // Alias keys are deliberately absent from these sets. A consumed alias is deleted by applyAliases,
@@ -30,7 +30,7 @@ const companyKeys = new Set(['name', 'fields', 'positions', 'documents', 'extrac
 const companyFieldsKeys = new Set(companyFieldKeys);
 const positionKeys = new Set(['status', 'position_type', 'start_date', 'end_date', 'expected_decision_date', 'notes', 'compensation', 'documents', 'extracted_data']);
 const compensationKeys = new Set(['type', 'amount', 'currency', 'frequency', 'instrument_type', 'quantity', 'grant_price', 'grant_date', 'notes', 'vesting', 'documents', 'extracted_data']);
-const vestingKeys = new Set(['schedule_type', 'cliff_date', 'vesting_start', 'vesting_end', 'cadence', 'notes', 'extracted_data']);
+const vestingKeys = new Set(['schedule_type', 'cliff_date', 'vesting_start', 'vesting_end', 'duration_months', 'cadence', 'notes', 'extracted_data']);
 const documentKeys = new Set(['document_type', 'status', 'file_path', 'file_name', 'description', 'document_date', 'extracted_data']);
 
 // Parsing is fully synchronous, so a module-scoped collector is safe here and keeps every helper
@@ -146,6 +146,7 @@ function parseVesting(value: unknown, path: string): ImportVestingNode | null {
     cliff_date: date(raw.cliff_date, `${path}.cliff_date`),
     vesting_start: date(raw.vesting_start, `${path}.vesting_start`),
     vesting_end: date(raw.vesting_end, `${path}.vesting_end`),
+    duration_months: integer(raw.duration_months, `${path}.duration_months`, 1, 600),
     cadence: raw.cadence == null || raw.cadence === '' ? null : oneOf(raw.cadence, `${path}.cadence`, cadences),
     notes: text(raw.notes, `${path}.notes`, limits.notes),
     extracted_data_json: extracted(raw.extracted_data, `${path}.extracted_data`, unmapped),
