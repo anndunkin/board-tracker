@@ -1,0 +1,576 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/anndunkin/board-tracker/blob/main/docs/board-tracker.import.schema.json",
+  "title": "Board Tracker import file",
+  "description": "Board positions, compensation, vesting and documents extracted from an agreement. Emit exactly this shape. Use null for anything the source does not state — never guess. Values not covered by a listed property are preserved rather than dropped, but they are easier to use when they land in the right field.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "schema_version",
+    "companies"
+  ],
+  "properties": {
+    "schema": {
+      "const": "board-tracker.import"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Date the extraction was produced. Format YYYY-MM-DD."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "tool": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What produced the file, e.g. \"Perplexity\".",
+          "maxLength": 200
+        },
+        "reference": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Link back to the session or source material.",
+          "maxLength": 2048
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Anything about how the extraction was done.",
+          "maxLength": 10000
+        }
+      }
+    },
+    "companies": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Legal entity name. Matched case-insensitively against existing companies.",
+            "maxLength": 200
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Company profile. Anything here that is not a listed property is kept in notes rather than discarded.",
+            "properties": {
+              "business_summary": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "What the company does.",
+                "maxLength": 10000
+              },
+              "sector": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Industry or sector.",
+                "maxLength": 150
+              },
+              "website": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Primary URL.",
+                "maxLength": 2048
+              },
+              "board_size": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "other_board_members": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Other directors or advisors, comma separated.",
+                "maxLength": 5000
+              },
+              "meeting_cadence": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "How often the board meets.",
+                "maxLength": 100
+              },
+              "notes": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Entity type, d/b/a, address, contacts, governing law and anything else.",
+                "maxLength": 10000
+              }
+            }
+          },
+          "positions": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "status",
+                "position_type"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "current",
+                    "former",
+                    "potential"
+                  ],
+                  "description": "Whether the person holds this seat now, held it before, or is considering it."
+                },
+                "position_type": {
+                  "type": "string",
+                  "enum": [
+                    "governing_board",
+                    "advisory_board",
+                    "advisor"
+                  ],
+                  "description": "A fiduciary seat is \"governing_board\"; an advisory board seat is \"advisory_board\"."
+                },
+                "start_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "description": "Date the appointment began or begins. Format YYYY-MM-DD."
+                },
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "description": "Date it ended. Omit for current positions. Format YYYY-MM-DD."
+                },
+                "expected_decision_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "description": "Only meaningful when status is \"potential\". Format YYYY-MM-DD."
+                },
+                "notes": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Title, term, time commitment, expense policy and any other terms.",
+                  "maxLength": 10000
+                },
+                "compensation": {
+                  "type": "array",
+                  "maxItems": 200,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "required": [
+                      "type"
+                    ],
+                    "description": "One compensation element. Cash retainers and equity grants are separate entries.",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "cash",
+                          "non_cash"
+                        ],
+                        "description": "Use \"non_cash\" for options, RSUs, warrants and other equity."
+                      },
+                      "amount": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "exclusiveMinimum": 0,
+                        "description": "Required when type is \"cash\"."
+                      },
+                      "currency": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Three-letter ISO code. Defaults to USD.",
+                        "maxLength": 3
+                      },
+                      "frequency": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "one_time",
+                          "annual",
+                          "quarterly",
+                          "monthly",
+                          "per_meeting",
+                          null
+                        ],
+                        "description": "Required when type is \"cash\"."
+                      },
+                      "instrument_type": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Required when type is \"non_cash\", e.g. \"Non-Statutory Stock Option\".",
+                        "maxLength": 100
+                      },
+                      "quantity": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "exclusiveMinimum": 0,
+                        "description": "Required when type is \"non_cash\". The number of units granted."
+                      },
+                      "grant_price": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "minimum": 0,
+                        "description": "Per-unit exercise or strike price. Use the actual number, e.g. 0.07."
+                      },
+                      "grant_date": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "description": "Date of grant. Format YYYY-MM-DD."
+                      },
+                      "notes": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Anything about this element that has no field of its own.",
+                        "maxLength": 10000
+                      },
+                      "vesting": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "required": [
+                          "schedule_type"
+                        ],
+                        "description": "A single vesting schedule object — not an array. A one-year cliff followed by monthly vesting is schedule_type \"cliff_linear\" with cadence \"monthly\".",
+                        "properties": {
+                          "schedule_type": {
+                            "type": "string",
+                            "enum": [
+                              "immediate",
+                              "cliff_linear",
+                              "milestone",
+                              "custom"
+                            ],
+                            "description": "Pick the closest listed value. A cliff followed by periodic vesting is \"cliff_linear\"."
+                          },
+                          "vesting_start": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "description": "The vesting commencement date. Required for any percent-vested calculation to work. Format YYYY-MM-DD."
+                          },
+                          "cliff_date": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "description": "Date the cliff portion vests. Format YYYY-MM-DD."
+                          },
+                          "vesting_end": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "description": "Date the grant is fully vested. Format YYYY-MM-DD."
+                          },
+                          "cadence": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "monthly",
+                              "quarterly",
+                              "annual",
+                              "one_time",
+                              null
+                            ],
+                            "description": "How often the post-cliff portion vests."
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "Cliff fraction, per-period fraction, total term, forfeiture and acceleration terms, and any conditions.",
+                            "maxLength": 10000
+                          }
+                        }
+                      },
+                      "documents": {
+                        "type": "array",
+                        "maxItems": 200,
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "required": [
+                            "document_type",
+                            "status"
+                          ],
+                          "description": "A document referenced by the agreement. Use status \"missing\" for anything you cannot supply a real local file path for.",
+                          "properties": {
+                            "document_type": {
+                              "type": "string",
+                              "description": "Short kind of document, e.g. \"Advisory agreement\", \"Stock option agreement\", \"Board approval\".",
+                              "maxLength": 100
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "linked",
+                                "missing"
+                              ],
+                              "description": "Use \"linked\" only with a real path on the user's own machine. Otherwise \"missing\"."
+                            },
+                            "file_path": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "Absolute path on the user's machine. Required when status is \"linked\", and must be omitted when status is \"missing\". Never invent a path.",
+                              "maxLength": 32767
+                            },
+                            "file_name": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "Display name. Derived from file_path when omitted.",
+                              "maxLength": 1024
+                            },
+                            "description": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "What the document is and anything notable about it.",
+                              "maxLength": 10000
+                            },
+                            "document_date": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                              "description": "Date on the document itself. Format YYYY-MM-DD."
+                            },
+                            "extracted_data": {
+                              "type": [
+                                "object",
+                                "array",
+                                "null"
+                              ],
+                              "description": "Any extra structured detail worth keeping. Retained verbatim for the audit trail."
+                            }
+                          }
+                        }
+                      },
+                      "extracted_data": {
+                        "type": [
+                          "object",
+                          "array",
+                          "null"
+                        ],
+                        "description": "Extra structured detail kept verbatim for the audit trail."
+                      }
+                    }
+                  }
+                },
+                "documents": {
+                  "type": "array",
+                  "maxItems": 200,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "required": [
+                      "document_type",
+                      "status"
+                    ],
+                    "description": "A document referenced by the agreement. Use status \"missing\" for anything you cannot supply a real local file path for.",
+                    "properties": {
+                      "document_type": {
+                        "type": "string",
+                        "description": "Short kind of document, e.g. \"Advisory agreement\", \"Stock option agreement\", \"Board approval\".",
+                        "maxLength": 100
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "linked",
+                          "missing"
+                        ],
+                        "description": "Use \"linked\" only with a real path on the user's own machine. Otherwise \"missing\"."
+                      },
+                      "file_path": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Absolute path on the user's machine. Required when status is \"linked\", and must be omitted when status is \"missing\". Never invent a path.",
+                        "maxLength": 32767
+                      },
+                      "file_name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Display name. Derived from file_path when omitted.",
+                        "maxLength": 1024
+                      },
+                      "description": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "What the document is and anything notable about it.",
+                        "maxLength": 10000
+                      },
+                      "document_date": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "description": "Date on the document itself. Format YYYY-MM-DD."
+                      },
+                      "extracted_data": {
+                        "type": [
+                          "object",
+                          "array",
+                          "null"
+                        ],
+                        "description": "Any extra structured detail worth keeping. Retained verbatim for the audit trail."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "documents": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "document_type",
+                "status"
+              ],
+              "description": "A document referenced by the agreement. Use status \"missing\" for anything you cannot supply a real local file path for.",
+              "properties": {
+                "document_type": {
+                  "type": "string",
+                  "description": "Short kind of document, e.g. \"Advisory agreement\", \"Stock option agreement\", \"Board approval\".",
+                  "maxLength": 100
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "linked",
+                    "missing"
+                  ],
+                  "description": "Use \"linked\" only with a real path on the user's own machine. Otherwise \"missing\"."
+                },
+                "file_path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Absolute path on the user's machine. Required when status is \"linked\", and must be omitted when status is \"missing\". Never invent a path.",
+                  "maxLength": 32767
+                },
+                "file_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Display name. Derived from file_path when omitted.",
+                  "maxLength": 1024
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "What the document is and anything notable about it.",
+                  "maxLength": 10000
+                },
+                "document_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "description": "Date on the document itself. Format YYYY-MM-DD."
+                },
+                "extracted_data": {
+                  "type": [
+                    "object",
+                    "array",
+                    "null"
+                  ],
+                  "description": "Any extra structured detail worth keeping. Retained verbatim for the audit trail."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

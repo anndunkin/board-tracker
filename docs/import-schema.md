@@ -172,14 +172,17 @@ Text is trimmed and control characters are stripped on the way in.
 
 This is the exact text behind the **Copy extraction prompt** button; a test keeps the two identical.
 
-> Read the attached board or advisory agreement and produce a Board Tracker import file. Output only
-> JSON matching the `board-tracker.import` schema version 1: a top-level object with `schema`,
-> `schema_version`, `generated_at`, `source`, and `companies`. Nest positions inside the company,
-> compensation inside the position, and vesting and documents inside the compensation they belong to.
-> Use `YYYY-MM-DD` for every date. Include `start_date` on each position. For every compensation and
-> document record add an `extracted_data` object with the clause number, the quoted source text, and a
-> confidence marker. Set `status: "linked"` with the absolute `file_path` for documents I have, and
-> `status: "missing"` with a description for any document the agreement references but does not
-> include. Do not invent values — omit a field rather than guessing it.
+> Read the attached board or advisory agreement and produce a Board Tracker import file. Follow the
+> attached `board-tracker.import.schema.json` exactly, including its field names — a synonym that
+> looks equivalent is not equivalent. Output only JSON matching the `board-tracker.import` schema
+> version 1: a top-level object with `schema`, `schema_version`, `generated_at`, `source`, and
+> `companies`. Nest positions inside the company, compensation inside the position, and vesting and
+> documents inside the compensation they belong to. Use `YYYY-MM-DD` for every date. Include
+> `start_date` on each position. `vesting` is a single object, not an array, and needs
+> `vesting_start` set to the vesting commencement date. For every compensation and document record
+> add an `extracted_data` object with the clause number, the quoted source text, and a confidence
+> marker. Set `status: "linked"` with the absolute `file_path` for documents I have, and `status:
+> "missing"` with a description for any document the agreement references but does not include. Do
+> not invent values — omit a field rather than guessing it.
 
 See [`import-example.json`](./import-example.json) for a complete worked file.

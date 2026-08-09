@@ -27,6 +27,11 @@ const migrations = [
  ALTER TABLE compensation ADD COLUMN import_batch_id INTEGER REFERENCES import_batches(id) ON DELETE SET NULL;
  CREATE INDEX IF NOT EXISTS idx_documents_import_batch ON documents(import_batch_id);
  CREATE INDEX IF NOT EXISTS idx_compensation_import_batch ON compensation(import_batch_id);
- CREATE INDEX IF NOT EXISTS idx_import_batches_imported_at ON import_batches(imported_at DESC);`
+ CREATE INDEX IF NOT EXISTS idx_import_batches_imported_at ON import_batches(imported_at DESC);`,
+// v0.4.2: fields an extraction supplies that this schema has no column for are kept here rather
+// than dropped. Companies, positions and vesting schedules previously had nowhere to put them.
+`ALTER TABLE companies ADD COLUMN extracted_data_json TEXT;
+ ALTER TABLE positions ADD COLUMN extracted_data_json TEXT;
+ ALTER TABLE vesting_schedules ADD COLUMN extracted_data_json TEXT;`
 ];
 export function runMigrations(db: Database.Database): void { db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'); const applied = new Set((db.prepare('SELECT version FROM schema_version').all() as { version: number }[]).map((row) => row.version)); migrations.forEach((sql, index) => { const version = index + 1; if (!applied.has(version)) db.transaction(() => { db.exec(sql); db.prepare('INSERT INTO schema_version(version) VALUES (?)').run(version); })(); }); }

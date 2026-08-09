@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { BoardTrackerDatabase } from './database';
 import { EXTRACTION_PROMPT } from '../shared/extraction-prompt';
+import { IMPORT_JSON_SCHEMA_FILENAME, importJsonSchemaText } from '../shared/import-json-schema';
 let database: BoardTrackerDatabase;
 const seedPath = (): string => app.isPackaged ? path.join(process.resourcesPath, 'seed_data.json') : path.join(app.getAppPath(), 'assets', 'seed_data.json');
 const importSeedData = (): { inserted: number; skipped: number } => database.importSeedCompanies(JSON.parse(fs.readFileSync(seedPath(), 'utf8')));
@@ -23,6 +24,8 @@ function registerHandlers(): void {
   ipcMain.handle('extracted-import:preview', (_e, contents: string, sourceLabel: string, selections) => database.previewExtractedImport(contents, sourceLabel, selections ?? {}));
   ipcMain.handle('extracted-import:commit', (_e, contents: string, sourceLabel: string, selections) => database.commitExtractedImport(contents, sourceLabel, selections ?? {}));
   ipcMain.handle('extracted-import:batches', () => database.listImportBatches());
+  // Writes the JSON Schema out so it can be attached to the extraction session alongside the agreement.
+  ipcMain.handle('extracted-import:save-schema', async (event) => { const parent = BrowserWindow.fromWebContents(event.sender); const options: Electron.SaveDialogOptions = { title: 'Save extraction schema', defaultPath: path.join(app.getPath('downloads'), IMPORT_JSON_SCHEMA_FILENAME), filters: [{ name: 'JSON Schema', extensions: ['json'] }] }; const result = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options); if (result.canceled || !result.filePath) return null; fs.writeFileSync(result.filePath, importJsonSchemaText(), 'utf8'); return result.filePath; });
 }
 app.whenReady().then(() => { database = new BoardTrackerDatabase(path.join(app.getPath('userData'), 'board-tracker.db')); registerHandlers(); importSeedData(); Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'File', submenu: [{ label: 'Import Seed Data', click: () => { importSeedData(); BrowserWindow.getAllWindows().forEach((window) => window.webContents.send('seed-imported')); } }, { role: 'quit' }] }, { label: 'View', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }] }])); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); }); app.on('before-quit', () => database?.close());

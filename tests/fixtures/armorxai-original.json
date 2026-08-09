@@ -1,0 +1,156 @@
+{
+  "schema": "board-tracker.import",
+  "schema_version": 1,
+  "generated_at": "2026-08-09",
+  "source": {
+    "document_title": "Kapalya Inc. dba ArmorxAI Advisory Board Agreement",
+    "file_path": "/home/user/workspace/uploaded_attachments/be8762e881ef4ad38056a37a002fd503/Advisor-agreement-Kapalya-dba-ArmorxAI-Dunkin-redlines_encrypted.pdf",
+    "document_date": "2026-03-09",
+    "execution_date": "2026-03-23",
+    "extraction_method": "assisted_extraction_external_session"
+  },
+  "companies": [
+    {
+      "name": "Kapalya Inc.",
+      "dba": "ArmorxAI",
+      "entity_type": "Delaware corporation",
+      "address": "1935A Addison Street, Berkeley, CA 94704, United States of America",
+      "primary_contact_name": "Sudesh Kumar",
+      "primary_contact_title": "Founder and CEO",
+      "primary_contact_email": "sudesh@armorx.ai",
+      "governing_law": "Hawaii",
+      "positions": [
+        {
+          "title": "Advisory Board Member",
+          "position_type": "advisory_board",
+          "status": "current",
+          "start_date": "2026-03-09",
+          "end_date": "2027-03-09",
+          "term_description": "One year from the date of the Agreement; renewable by mutual agreement. Terminable by either party for any reason on ten days prior written notice.",
+          "relationship": "independent_contractor",
+          "time_commitment": "Not to average more than five (5) hours per month, excluding a minimum of two in-person meetings per year; electronic strategic input at least twice per month.",
+          "expense_policy": "Reimbursement of reasonable travel and related expenses; any expense in excess of $250 requires advance Company approval.",
+          "compensation": [
+            {
+              "compensation_type": "non_cash",
+              "instrument": "non-statutory stock option",
+              "quantity": 65010,
+              "quantity_unit": "shares",
+              "security_class": "common stock",
+              "exercise_price_basis": "fair market value at time of grant",
+              "reference_valuation_per_share": 0.07,
+              "reference_valuation_basis": "latest 409A valuation",
+              "currency": "USD",
+              "cash_amount": 0,
+              "grant_condition": "Subject to approval by the Company's Board of Directors and to the terms of the Company's Stock Plan and the applicable Stock Option Agreement.",
+              "governing_plan": "Company Stock Plan (the \"Plan\")",
+              "extracted_data": {
+                "clause": "1",
+                "clause_title": "Compensation",
+                "source_text": "Advisor shall not be paid for the Services performed hereunder.  However, subject to approval by the Company's Board of Directors, the Company will issue to Advisor a non-statutory stock option to purchase 65,010 shares of the Company's common stock, with an exercise price per share equal to the fair market value at the time of grant (latest 409A valuation at $0.07/share).",
+                "page": 1,
+                "confidence": "high"
+              },
+              "vesting": [
+                {
+                  "vesting_type": "cliff_then_monthly",
+                  "commencement_date": "2026-03-09",
+                  "cliff_months": 12,
+                  "cliff_date": "2027-03-09",
+                  "cliff_fraction": "1/4",
+                  "cliff_shares": 16252.5,
+                  "post_cliff_fraction_per_period": "1/48",
+                  "post_cliff_period": "monthly",
+                  "total_vesting_months": 48,
+                  "vesting_condition": "Based upon Advisor's continued service to the Company.",
+                  "forfeiture_terms": "If Advisor voluntarily stops services prior to the initial 12 months of service, or the Company terminates for non-performance, all options are forfeited as none will have vested.",
+                  "acceleration_terms": "If the Company terminates the agreement for convenience before the initial 12 months, options vest on a pro-rated basis.",
+                  "extracted_data": {
+                    "clause": "1",
+                    "clause_title": "Compensation",
+                    "source_text": "Such shares will vest and become exercisable in accordance with the following schedule:  1/4th of the total number of shares shall vest and become exercisable after continuous service of 12 months, and 1/48th of the total number of shares shall vest and become exercisable monthly thereafter, based upon Advisor's continued service to the Company, as provided in this Agreement and as specified in the Stock Option Agreement between the Company and Advisor. If the advisor voluntarily stops their services prior to the initial 12 months of service or the Company terminates the agreement for non-performance, then they will forfeit all options as none of the options will be vested. If the Company terminates the agreement for convenience before the initial 12 months, options shall vest on a pro-rated basis.",
+                    "page": 1,
+                    "confidence": "high"
+                  }
+                }
+              ],
+              "documents": [
+                {
+                  "document_type": "advisory_agreement",
+                  "title": "Kapalya Inc. dba ArmorxAI Advisory Board Agreement (Dunkin redlines, executed)",
+                  "status": "linked",
+                  "file_path": "/home/user/workspace/uploaded_attachments/be8762e881ef4ad38056a37a002fd503/Advisor-agreement-Kapalya-dba-ArmorxAI-Dunkin-redlines_encrypted.pdf",
+                  "document_date": "2026-03-09",
+                  "signed_date": "2026-03-23",
+                  "signatories": [
+                    "Sudesh Kumar, Founder and CEO, Kapalya Inc. dba ArmorxAI",
+                    "Ann Dunkin, Advisor"
+                  ],
+                  "includes_schedule_a": true,
+                  "extracted_data": {
+                    "clause": "Preamble and signature pages",
+                    "source_text": "This Advisory Board Agreement (this \"Agreement\") is entered into as of _March 9, 2026, by and between KAPALYA Inc. dba ArmorxAI, a Delaware corporation (the \"Company\") having a place of business at 1935A Addison Street, Berkeley, CA 94704 and Ann Dunkin (\"Advisor\").",
+                    "page": 1,
+                    "confidence": "high"
+                  }
+                },
+                {
+                  "document_type": "equity_plan",
+                  "title": "Company Stock Plan (the \"Plan\")",
+                  "status": "missing",
+                  "description": "The Company's Stock Plan governing the option grant. Referenced in Clause 1 but not attached to or included with the Agreement.",
+                  "extracted_data": {
+                    "clause": "1",
+                    "clause_title": "Compensation",
+                    "source_text": "The option will be subject to the terms and conditions applicable to options granted under the Company's Stock Plan (the \"Plan\"), as described in the Plan and the applicable Stock Option Agreement, which Advisor will need to sign (the \"Stock Agreement\").",
+                    "page": 1,
+                    "confidence": "high"
+                  }
+                },
+                {
+                  "document_type": "stock_option_agreement",
+                  "title": "Stock Option Agreement (the \"Stock Agreement\")",
+                  "status": "missing",
+                  "description": "The stock option agreement between the Company and Advisor that Advisor must sign, specifying the option's vesting and exercise terms. Referenced in Clause 1 but not attached to or included with the Agreement.",
+                  "extracted_data": {
+                    "clause": "1",
+                    "clause_title": "Compensation",
+                    "source_text": "as described in the Plan and the applicable Stock Option Agreement, which Advisor will need to sign (the \"Stock Agreement\")",
+                    "page": 1,
+                    "confidence": "high"
+                  }
+                },
+                {
+                  "document_type": "board_approval",
+                  "title": "Board of Directors approval of Advisor option grant",
+                  "status": "missing",
+                  "description": "Evidence of Company Board of Directors approval of the 65,010-share non-statutory option grant, which is a stated condition of issuance. Referenced in Clause 1 but not included.",
+                  "extracted_data": {
+                    "clause": "1",
+                    "clause_title": "Compensation",
+                    "source_text": "However, subject to approval by the Company's Board of Directors, the Company will issue to Advisor a non-statutory stock option to purchase 65,010 shares of the Company's common stock",
+                    "page": 1,
+                    "confidence": "high"
+                  }
+                },
+                {
+                  "document_type": "valuation",
+                  "title": "409A valuation report supporting $0.07 per share",
+                  "status": "missing",
+                  "description": "The latest 409A valuation referenced as the basis for the $0.07 per-share fair market value. Referenced in Clause 1 but not included.",
+                  "extracted_data": {
+                    "clause": "1",
+                    "clause_title": "Compensation",
+                    "source_text": "with an exercise price per share equal to the fair market value at the time of grant (latest 409A valuation at $0.07/share)",
+                    "page": 1,
+                    "confidence": "high"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

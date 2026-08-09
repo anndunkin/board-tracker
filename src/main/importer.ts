@@ -87,12 +87,12 @@ class ImportRun {
     const incoming = { schedule_type: vesting.schedule_type, cliff_date: vesting.cliff_date, vesting_start: vesting.vesting_start, vesting_end: vesting.vesting_end, cadence: vesting.cadence, notes: vesting.notes };
     if (!existing) {
       if (!this.record({ key, kind: 'vesting', action: 'create', context, label, changes: Object.entries(incoming).filter(([, to]) => !blank(to)).map(([field, to]) => ({ field, from: null, to: String(to), overwrite: false })), reason: 'New vesting schedule.' })) return;
-      this.db.prepare('INSERT INTO vesting_schedules(compensation_id,schedule_type,cliff_date,vesting_start,vesting_end,cadence,notes) VALUES (?,?,?,?,?,?,?)').run(compensationId, vesting.schedule_type, vesting.cliff_date, vesting.vesting_start, vesting.vesting_end, vesting.cadence, vesting.notes);
+      this.db.prepare('INSERT INTO vesting_schedules(compensation_id,schedule_type,cliff_date,vesting_start,vesting_end,cadence,notes,extracted_data_json) VALUES (?,?,?,?,?,?,?,?)').run(compensationId, vesting.schedule_type, vesting.cliff_date, vesting.vesting_start, vesting.vesting_end, vesting.cadence, vesting.notes, vesting.extracted_data_json);
       return;
     }
     const verdict = classify(existing, incoming);
     if (!this.record({ key, kind: 'vesting', action: verdict.action, context, label, changes: verdict.changes, reason: verdict.reason })) return;
-    this.db.prepare('UPDATE vesting_schedules SET schedule_type=?,cliff_date=COALESCE(?,cliff_date),vesting_start=COALESCE(?,vesting_start),vesting_end=COALESCE(?,vesting_end),cadence=COALESCE(?,cadence),notes=COALESCE(?,notes),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(vesting.schedule_type, vesting.cliff_date, vesting.vesting_start, vesting.vesting_end, vesting.cadence, vesting.notes, existing.id as number);
+    this.db.prepare('UPDATE vesting_schedules SET schedule_type=?,cliff_date=COALESCE(?,cliff_date),vesting_start=COALESCE(?,vesting_start),vesting_end=COALESCE(?,vesting_end),cadence=COALESCE(?,cadence),notes=COALESCE(?,notes),extracted_data_json=COALESCE(?,extracted_data_json),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(vesting.schedule_type, vesting.cliff_date, vesting.vesting_start, vesting.vesting_end, vesting.cadence, vesting.notes, vesting.extracted_data_json, existing.id as number);
   }
 
   private compensation(comp: ImportCompensationNode, companyId: number, positionId: number, key: string, context: string): void {
@@ -135,12 +135,12 @@ class ImportRun {
       this.blockSubtree(key, 'position', context, label, `${candidates.length} existing positions match this type and status. Add a start_date to the file so the right one can be identified.`);
     } else if (!existing) {
       const changes: ImportChange[] = Object.entries({ position_type: position.position_type, status: position.status, start_date: position.start_date, end_date: position.end_date, expected_decision_date: position.expected_decision_date, notes: position.notes }).filter(([, to]) => !blank(to)).map(([field, to]) => ({ field, from: null, to: String(to), overwrite: false }));
-      if (this.record({ key, kind: 'position', action: 'create', context, label, changes, reason: 'New position for this company.' })) positionId = this.db.prepare('INSERT INTO positions(company_id,status,position_type,start_date,end_date,expected_decision_date,notes) VALUES (?,?,?,?,?,?,?)').run(companyId, position.status, position.position_type, position.start_date, position.end_date, position.expected_decision_date, position.notes).lastInsertRowid as number;
+      if (this.record({ key, kind: 'position', action: 'create', context, label, changes, reason: 'New position for this company.' })) positionId = this.db.prepare('INSERT INTO positions(company_id,status,position_type,start_date,end_date,expected_decision_date,notes,extracted_data_json) VALUES (?,?,?,?,?,?,?,?)').run(companyId, position.status, position.position_type, position.start_date, position.end_date, position.expected_decision_date, position.notes, position.extracted_data_json).lastInsertRowid as number;
     } else {
       positionId = existing.id as number;
       const verdict = classify(existing, { start_date: position.start_date, end_date: position.end_date, expected_decision_date: position.expected_decision_date, notes: position.notes });
       const reason = verdict.action === 'skip' ? 'Matched an existing position; no field changes needed.' : verdict.reason;
-      if (this.record({ key, kind: 'position', action: verdict.action, context, label, changes: verdict.changes, reason }) && verdict.changes.length) this.db.prepare('UPDATE positions SET start_date=COALESCE(?,start_date),end_date=COALESCE(?,end_date),expected_decision_date=COALESCE(?,expected_decision_date),notes=COALESCE(?,notes),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(position.start_date, position.end_date, position.expected_decision_date, position.notes, positionId);
+      if (this.record({ key, kind: 'position', action: verdict.action, context, label, changes: verdict.changes, reason }) && verdict.changes.length) this.db.prepare('UPDATE positions SET start_date=COALESCE(?,start_date),end_date=COALESCE(?,end_date),expected_decision_date=COALESCE(?,expected_decision_date),notes=COALESCE(?,notes),extracted_data_json=COALESCE(?,extracted_data_json),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(position.start_date, position.end_date, position.expected_decision_date, position.notes, position.extracted_data_json, positionId);
     }
     if (positionId == null) {
       position.compensation.forEach((comp, index) => this.blockSubtree(`${key}.compensation[${index}]`, 'compensation', context, comp.instrument_type ?? 'Cash', 'Parent position was not imported.'));
@@ -157,14 +157,16 @@ class ImportRun {
     let companyId: number | null = null;
     if (!existing) {
       const changes: ImportChange[] = [{ field: 'name', from: null, to: company.name, overwrite: false }, ...Object.entries(company.fields).filter(([, to]) => !blank(to)).map(([field, to]) => ({ field, from: null, to: String(to), overwrite: false }))];
-      if (this.record({ key, kind: 'company', action: 'create', context: company.name, label: company.name, changes, reason: 'No company with this name exists yet.' })) companyId = this.db.prepare('INSERT INTO companies(name,business_summary,sector,website,board_size,other_board_members,meeting_cadence,notes) VALUES (?,?,?,?,?,?,?,?)').run(company.name, company.fields.business_summary, company.fields.sector, company.fields.website, company.fields.board_size, company.fields.other_board_members, company.fields.meeting_cadence, company.fields.notes).lastInsertRowid as number;
+      if (this.record({ key, kind: 'company', action: 'create', context: company.name, label: company.name, changes, reason: 'No company with this name exists yet.' })) companyId = this.db.prepare('INSERT INTO companies(name,business_summary,sector,website,board_size,other_board_members,meeting_cadence,notes,extracted_data_json) VALUES (?,?,?,?,?,?,?,?,?)').run(company.name, company.fields.business_summary, company.fields.sector, company.fields.website, company.fields.board_size, company.fields.other_board_members, company.fields.meeting_cadence, company.fields.notes, company.extracted_data_json).lastInsertRowid as number;
     } else {
       companyId = existing.id as number;
       this.record({ key, kind: 'company', action: 'skip', context: company.name, label: company.name, changes: [], reason: `Matched existing company #${companyId}.` });
       const verdict = classify(existing, company.fields as Record<string, unknown>);
       if (verdict.changes.length && this.record({ key: `${key}.fields`, kind: 'company_fields', action: verdict.action, context: company.name, label: `${company.name} — profile fields`, changes: verdict.changes, reason: verdict.reason })) {
         const set = verdict.changes.map((change) => `${change.field}=@${change.field}`).join(',');
-        this.db.prepare(`UPDATE companies SET ${set},updated_at=CURRENT_TIMESTAMP WHERE id=@id`).run({ ...Object.fromEntries(verdict.changes.map((change) => [change.field, (company.fields as Record<string, unknown>)[change.field]])), id: companyId });
+        // The audit payload rides along with a profile update but never triggers one on its own: it is
+        // extraction metadata, not a value the user typed, so it must not raise a conflict.
+        this.db.prepare(`UPDATE companies SET ${set},extracted_data_json=COALESCE(@extracted_data_json,extracted_data_json),updated_at=CURRENT_TIMESTAMP WHERE id=@id`).run({ ...Object.fromEntries(verdict.changes.map((change) => [change.field, (company.fields as Record<string, unknown>)[change.field]])), extracted_data_json: company.extracted_data_json, id: companyId });
       }
     }
     if (companyId == null) {
@@ -189,6 +191,7 @@ const summarize = (operations: ImportOperation[], payload: ImportPayload): Impor
   operations,
   counts: { create: 0, update: 0, conflict: 0, skip: 0, blocked: 0, ...operations.reduce<Record<string, number>>((totals, op) => ({ ...totals, [op.action]: (totals[op.action] ?? 0) + 1 }), {}) } as ImportPlan['counts'],
   selected_count: operations.filter((op) => op.selected).length,
+  warnings: payload.warnings,
 });
 
 function walk(db: Database.Database, payload: ImportPayload, selections: ImportSelections, batchId: number | null): ImportOperation[] {

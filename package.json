@@ -1,6 +1,6 @@
 {
   "name": "board-tracker",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "A desktop app for tracking board and advisory positions.",
   "private": true,
   "main": "dist/main/main.js",
@@ -53,7 +53,9 @@
       }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "nsis": {

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import type { Company, CompanyDetail, CompanyInput, Compensation, CompensationFrequency, CompensationInput, CompensationType, DashboardData, Document, DocumentInput, ImportBatch, ImportFileResult, ImportOperation, ImportOperationAction, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, PositionStatus, PositionType, VestingCadence, VestingSchedule, VestingScheduleInput, VestingScheduleType } from '../shared/types';
+import type { Company, CompanyDetail, CompanyInput, Compensation, CompensationFrequency, CompensationInput, CompensationType, DashboardData, Document, DocumentInput, ImportBatch, ImportFileResult, ImportNotice, ImportOperation, ImportOperationAction, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, PositionStatus, PositionType, VestingCadence, VestingSchedule, VestingScheduleInput, VestingScheduleType } from '../shared/types';
 
 type Modal = null | { kind: 'company'; item?: Company } | { kind: 'position'; item?: Position } | { kind: 'compensation'; positionId: number; item?: Compensation } | { kind: 'instrument-type'; item?: InstrumentType } | { kind: 'document'; item?: Document; focusFile?: boolean };
 const documentTypes = ['board_agreement', 'offer_letter', 'grant_agreement', 'nda', 'confirmation_of_shares'];
@@ -70,6 +70,33 @@ const changeLabel = (field: string) => field === 'extracted_data_json' ? 'Extrac
 const changeValue = (field: string, value: string) => field === 'extracted_data_json' ? 'Audit payload from the extraction' : enumFields.has(field) ? label(value) : value;
 const errorText = (error: unknown) => { const raw = error instanceof Error ? error.message : String(error); return raw.replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^(ValidationError|Error):\s*/, ''); };
 
+/** The parser reports every problem at once, so render them as a list rather than one sentence. */
+function ImportProblem({ problem, pasted }: { problem: string; pasted: boolean }) {
+  const [heading, ...items] = problem.split('\n');
+  const bullets = items.map((line) => line.replace(/^•\s*/, '')).filter(Boolean);
+  return <div className="content-card import-problem" role="alert">
+    <strong>{pasted ? 'This JSON could not be read' : 'This file could not be read'}</strong>
+    <p>{heading}</p>
+    {bullets.length > 0 && <ul className="import-problem-list">{bullets.map((line) => <li key={line}>{line}</li>)}</ul>}
+    {bullets.length > 0 && <p className="import-problem-hint">Fix these in the extraction and load it again. Saving the schema file and attaching it to the session prevents most of them.</p>}
+  </div>;
+}
+
+/** Nothing in the file is discarded silently — anything renamed or untracked is listed here. */
+function ImportWarnings({ warnings }: { warnings: ImportNotice[] }) {
+  const [open, setOpen] = useState(false);
+  const aliases = warnings.filter((warning) => warning.kind === 'alias');
+  const unmapped = warnings.filter((warning) => warning.kind === 'unmapped');
+  const summary = [aliases.length && `${aliases.length} field${aliases.length === 1 ? '' : 's'} renamed to match the schema`, unmapped.length && `${unmapped.length} record${unmapped.length === 1 ? '' : 's'} had fields the schema does not track`].filter(Boolean).join(' · ');
+  return <div className="import-notices">
+    <button type="button" className="import-notices-toggle" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
+      <span aria-hidden="true">{open ? '▾' : '▸'}</span> How this file was read — {summary}
+    </button>
+    <p className="import-notices-hint">Untracked fields are saved with the record's audit payload, not discarded, and your own notes are left untouched. Check them below before committing.</p>
+    {open && <ul className="import-notices-list">{warnings.map((warning, index) => <li key={`${warning.path}-${index}`} className={`import-notice-${warning.kind}`}><code>{warning.path}</code> {warning.message}</li>)}</ul>}
+  </div>;
+}
+
 function ImportExtractedData({ notify, onImported }: { notify: (message: string) => void; onImported: () => void }) {
   const [file, setFile] = useState<ImportFileResult | null>(null);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
@@ -101,6 +128,7 @@ function ImportExtractedData({ notify, onImported }: { notify: (message: string)
     catch (error) { setProblem(errorText(error)); }
   };
   const copyPrompt = async () => { try { await window.boardTracker.extractedImport.copyPrompt(); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch (error) { setProblem(errorText(error)); } };
+  const saveSchema = async () => { try { const saved = await window.boardTracker.extractedImport.saveSchema(); if (saved) notify(`Schema saved to ${saved}. Attach it to your Perplexity session with the agreement.`); } catch (error) { setProblem(errorText(error)); } };
   const reviewPasted = () => { const contents = pasted.trim(); if (!contents) return; setCommitted(null); setSelections({}); setPlan(null); setProblem(''); setFile({ file_path: '', file_name: 'Pasted JSON', contents }); };
   const reset = () => { setFile(null); setPlan(null); setSelections({}); setProblem(''); setCommitted(null); setPasted(''); setShowPaste(false); };
   const setAll = (value: boolean) => setSelections(Object.fromEntries((plan?.operations ?? []).filter((operation) => operation.action !== 'skip' && operation.action !== 'blocked').map((operation) => [operation.key, value])));
@@ -125,7 +153,7 @@ function ImportExtractedData({ notify, onImported }: { notify: (message: string)
         <li>Paste or load it here, review every change, then commit the ones you want.</li>
       </ol>
       <p className="import-hint">Board Tracker does not read documents and makes no network calls — the extraction happens in your Perplexity session, and the app only reads the JSON you give it. The format is documented in <code>docs/import-schema.md</code>, with a worked example in <code>docs/import-example.json</code>.</p>
-      <div className="import-prompt-actions"><button className="button secondary" onClick={copyPrompt} disabled={busy}>{copied ? 'Prompt copied' : 'Copy extraction prompt'}</button>{copied && <small role="status">Paste it into a Perplexity session together with the agreement.</small>}</div>
+      <div className="import-prompt-actions"><button className="button secondary" onClick={copyPrompt} disabled={busy}>{copied ? 'Prompt copied' : 'Copy extraction prompt'}</button><button className="button secondary" onClick={saveSchema} disabled={busy}>Save schema file…</button>{copied && <small role="status">Paste it into a Perplexity session together with the agreement.</small>}</div>
     </section>
 
     {showPaste && <section className="content-card import-paste">
@@ -135,7 +163,7 @@ function ImportExtractedData({ notify, onImported }: { notify: (message: string)
       <div className="import-commit"><button className="button" onClick={reviewPasted} disabled={busy || !pasted.trim()}>Review pasted JSON</button>{!pasted.trim() && <small>Paste the JSON above to review it.</small>}</div></div>
     </section>}
 
-    {problem && <div className="content-card import-problem" role="alert"><strong>{pasted ? 'This JSON could not be read' : 'This file could not be read'}</strong><p>{problem}</p></div>}
+    {problem && <ImportProblem problem={problem} pasted={Boolean(pasted)} />}
 
     {committed && <div className="content-card import-result" role="status"><strong>Import complete</strong><p>{committed.counts.create} record{committed.counts.create === 1 ? '' : 's'} created and {committed.counts.update + committed.counts.conflict} updated from <code>{committed.source.label}</code>. The raw extraction payload was saved as batch #{committed.batch_id} for the audit trail.</p></div>}
 
@@ -144,6 +172,8 @@ function ImportExtractedData({ notify, onImported }: { notify: (message: string)
 
       <div className="import-body">
       {plan && <div className="import-counts">{(['create', 'update', 'conflict', 'skip', 'blocked'] as ImportOperationAction[]).filter((action) => plan.counts[action] > 0).map((action) => <span key={action} className={`badge import-${action}`}>{plan.counts[action]} {actionLabels[action].toLowerCase()}</span>)}</div>}
+
+      {plan && plan.warnings.length > 0 && <ImportWarnings warnings={plan.warnings} />}
 
       {plan && plan.counts.conflict > 0 && <p className="import-warning" role="note">Conflicts are switched off by default because applying them would replace a value you already have. Tick one only after checking the before and after values below.</p>}
 

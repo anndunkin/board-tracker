@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.4.2] — 2026-08-09
+
+Prompted by a real extraction that the v0.4.1 importer rejected four times in a row, each time
+naming only one problem, and which — once it finally parsed — would have silently discarded about
+thirty fields including the vesting start date the dashboard's percent-vested figure is computed
+from. The principle this release settles on: **strict on meaning, forgiving on naming, never silent.**
+
+### Added
+- **Every problem in a file is reported at once**, as a numbered list with the JSON path and the
+  offending value for each (`positions[0].status: must be one of: current, former, potential. Found
+  "nope".`). Fixing an extraction no longer means one blind edit per reload. Very long lists are
+  capped at 25 shown.
+- **Field names that are obviously synonyms are accepted and reported**, never applied silently:
+  `company_name`, `position_status`, `role_type`, `compensation_type`, `instrument`, `shares`,
+  `exercise_price`, `vesting_type`, `commencement_date`, `post_cliff_period`, and others. A
+  single-element `vesting` array is read as the one object it contains. Company profile fields
+  written at the top level are moved into `fields`. Aliases rename keys only — they never
+  reinterpret a value, so a `vesting_type` of `cliff_then_monthly` is still an error, correctly.
+- **Fields the schema does not track are kept, not dropped.** They are stored in the record's
+  `extracted_data` audit payload under `unmapped_fields` and listed in the review panel with their
+  values before you commit. Your own notes are never written to by an import.
+- **A machine-readable JSON Schema** (`docs/board-tracker.import.schema.json`, draft 2020-12) and a
+  **Save schema file…** button that writes it to disk, so it can be attached to the extraction
+  session alongside the agreement. The schema is generated from the same constants the parser
+  validates against and a test asserts the checked-in file matches, so the two cannot drift.
+
+### Changed
+- Companies, positions, and vesting schedules gained an `extracted_data_json` column (migration 7),
+  matching the one compensation and documents already had.
+- The extraction prompt now tells the model to follow the attached schema file exactly and that
+  `vesting` is a single object requiring `vesting_start`.
+
+### Notes
+- The importer will not infer a value it was not given. An extraction that supplies a 409A
+  reference valuation but no exercise price leaves `grant_price` empty for you to fill in, with the
+  reference number preserved and shown; one that gives a vesting duration in months but no
+  `vesting_end` leaves the percentage uncalculable. Both are visible in the review panel rather
+  than guessed.
+
 ## [0.4.1] — 2026-08-09
 
 ### Added

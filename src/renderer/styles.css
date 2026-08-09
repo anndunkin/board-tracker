@@ -38,3 +38,16 @@
 .import-intro{padding:22px 24px}
 .import-problem,.import-result{padding:18px 22px}
 .import-body{padding:0 24px 22px}
+
+/* v0.4.2 — every problem at once, and a record of how the file was read. */
+.import-problem-list{margin:8px 0 0;padding-left:20px;color:var(--muted);font-size:var(--text-sm);line-height:1.6}
+.import-problem-list li{margin-bottom:4px;word-break:break-word}
+.import-problem-hint{margin-top:10px!important;font-style:italic}
+.import-notices{margin:0 0 16px;padding:10px 14px;border-radius:10px;background:var(--surface-alt);border:1px solid var(--border)}
+.import-notices-toggle{display:block;width:100%;text-align:left;padding:0;border:0;background:none;color:var(--text);font-size:var(--text-xs);font-weight:600;cursor:pointer;line-height:1.5}
+.import-notices-toggle:hover{color:var(--accent)}
+.import-notices-hint{margin:4px 0 0;color:var(--muted);font-size:var(--text-xs);line-height:1.5}
+.import-notices-list{margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:var(--text-xs);line-height:1.6}
+.import-notices-list li{margin-bottom:4px;word-break:break-word}
+.import-notices-list code{background:var(--surface);padding:1px 5px;border-radius:5px;font-size:var(--text-xs)}
+.import-notice-unmapped{color:var(--amber)}

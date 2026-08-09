@@ -101,6 +101,20 @@ tracking.
 - Raw extraction payload stored alongside the record for audit trail.
 - `v0.4.0` release.
 
+### v0.4.1 — Import ergonomics (Delivered)
+- Copy-extraction-prompt button and a paste-JSON box, so an import no longer
+  requires saving a file first.
+
+### v0.4.2 — Import robustness (Delivered)
+- Report every problem in a file at once, with the JSON path and the offending
+  value, instead of failing on the first one.
+- Accept synonym field names and a single-element vesting array, reporting each
+  rename rather than applying it silently. Renames never reinterpret a value.
+- Keep fields the schema does not track in the record's audit payload and list
+  them in the review panel, instead of dropping them without a word.
+- Publish `docs/board-tracker.import.schema.json` and a Save schema file button
+  so the schema can be attached to the extraction session.
+
 ### v0.5.0+ — Polish & reporting
 - Reporting views: compensation summary across all positions, upcoming
   vesting events, missing-document report.

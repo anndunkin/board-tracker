@@ -8,6 +8,8 @@ import type { BoardTrackerDatabase } from '../src/main/database';
 import type { ImportOperation, ImportPlan } from '../src/shared/types';
 import { EXTRACTION_PROMPT } from '../src/shared/extraction-prompt';
 import { IMPORT_SCHEMA_ID, IMPORT_SCHEMA_VERSION } from '../src/main/import-schema';
+import { importJsonSchemaText } from '../src/shared/import-json-schema';
+import { cadences, compensationTypes, documentStatuses, frequencies, positionStatuses, positionTypes, scheduleTypes } from '../src/shared/import-constants';
 
 let db: BoardTrackerDatabase; let cleanup: () => void;
 beforeEach(() => ({ db, cleanup } = testDatabase())); afterEach(() => cleanup());
@@ -390,5 +392,176 @@ describe('import: security', () => {
     commit(importFile({ companies: [{ name: 'Traversal Corp', documents: [{ document_type: 'agreement', status: 'linked', file_path: traversal }] }] }));
     const company = db.listCompanies('Traversal')[0];
     expect(db.getCompany(company.id)!.documents[0]).toMatchObject({ file_path: traversal, file_name: 'SAM' });
+  });
+});
+
+describe('import: every problem is reported at once', () => {
+  const parse = (payload: unknown) => { try { db.previewExtractedImport(JSON.stringify(payload), 'x.json'); return ''; } catch (error) { return (error as Error).message; } };
+
+  it('lists all validation failures in one pass instead of stopping at the first', () => {
+    const message = parse({ schema: IMPORT_SCHEMA_ID, schema_version: 1, companies: [
+      { name: 'Alpha', positions: [{ status: 'nope', position_type: 'advisor', compensation: [{ type: 'non_cash', quantity: 5 }] }] },
+      { positions: [{ status: 'current', position_type: 'bad', start_date: 'not-a-date' }] },
+    ] });
+    expect(message).toMatch(/^Found 5 problems in this file:/);
+    for (const fragment of ['positions[0].status', 'compensation[0].instrument_type', 'companies[1].name', 'positions[0].position_type', 'positions[0].start_date']) expect(message).toContain(fragment);
+  });
+
+  it('renders one problem in the singular and caps a very long list', () => {
+    expect(parse({ schema: IMPORT_SCHEMA_ID, schema_version: 1, companies: [{ name: 'Alpha', positions: [{ status: 'current' }] }] })).toMatch(/^Found 1 problem in this file:/);
+    const many = parse({ schema: IMPORT_SCHEMA_ID, schema_version: 1, companies: Array.from({ length: 40 }, () => ({ positions: [] })) });
+    expect(many.split('\n')).toHaveLength(27);
+    expect(many).toContain('…and 15 more.');
+  });
+
+  it('reports the offending value so the fix is obvious', () => {
+    expect(parse({ schema: IMPORT_SCHEMA_ID, schema_version: 1, companies: [{ name: 'Alpha', positions: [{ status: 'active', position_type: 'advisor' }] }] })).toContain('Found "active".');
+  });
+});
+
+describe('import: safe aliases', () => {
+  const aliased = {
+    schema: IMPORT_SCHEMA_ID, schema_version: 1,
+    companies: [{ company_name: 'Alpha Corp', sector: 'Security', positions: [{ position_status: 'current', position_type: 'advisory_board', start_date: '2026-01-01', compensation: [{ compensation_type: 'non_cash', instrument: 'Non-Statutory Stock Option', shares: 1000, exercise_price: 0.07, vesting: [{ vesting_type: 'cliff_linear', commencement_date: '2026-01-01', post_cliff_period: 'monthly' }] }] }] }],
+  };
+
+  it('accepts pure renames, a single-item vesting array, and company fields hoisted out of "fields"', () => {
+    const plan = commit(aliased);
+    expect(plan.counts).toMatchObject({ conflict: 0, blocked: 0 });
+    const detail = db.getCompany(db.listCompanies('Alpha Corp')[0].id)!;
+    expect(detail.sector).toBe('Security');
+    const grant = detail.positions[0].compensation[0];
+    expect(grant).toMatchObject({ type: 'non_cash', quantity: 1000, grant_price: 0.07, instrument_type_name: 'Non-Statutory Stock Option' });
+    expect(grant.active_vesting_schedule).toMatchObject({ schedule_type: 'cliff_linear', vesting_start: '2026-01-01', cadence: 'monthly' });
+  });
+
+  it('reports every rename rather than applying it silently', () => {
+    const messages = preview(aliased).warnings.filter((warning) => warning.kind === 'alias').map((warning) => warning.message);
+    for (const fragment of ['Read "company_name" as "name".', 'Read "sector" as "fields.sector".', 'Read "position_status" as "status".', 'Read "compensation_type" as "type".', 'Read "instrument" as "instrument_type".', 'Read "shares" as "quantity".', 'Read "exercise_price" as "grant_price".', 'Read the single-item vesting array as one vesting object.', 'Read "vesting_type" as "schedule_type".', 'Read "commencement_date" as "vesting_start".', 'Read "post_cliff_period" as "cadence".']) expect(messages).toContain(fragment);
+  });
+
+  it('never guesses a value, only a field name', () => {
+    expect(() => preview({ ...aliased, companies: [{ ...aliased.companies[0], positions: [{ ...aliased.companies[0].positions[0], compensation: [{ ...aliased.companies[0].positions[0].compensation[0], vesting: [{ vesting_type: 'cliff_then_monthly' }] }] }] }] })).toThrow(/schedule_type: must be one of.*Found "cliff_then_monthly"/s);
+  });
+
+  it('keeps the canonical field when both it and an alias are present, and reports the alias as untracked', () => {
+    const plan = preview({ schema: IMPORT_SCHEMA_ID, schema_version: 1, companies: [{ name: 'Real Name', company_name: 'Alias Name' }] });
+    expect(op(plan, 'companies[0]').label).toBe('Real Name');
+    expect(plan.warnings.find((warning) => warning.kind === 'unmapped')!.message).toContain('company_name: Alias Name');
+  });
+});
+
+describe('import: unknown fields are kept, never silently dropped', () => {
+  const withExtras = { schema: IMPORT_SCHEMA_ID, schema_version: 1, companies: [{
+    name: 'Kapalya Inc.', dba: 'ArmorxAI', governing_law: 'Delaware',
+    positions: [{ status: 'current', position_type: 'advisory_board', start_date: '2026-03-09', title: 'Advisory Board Member', time_commitment: '2 hours per month',
+      compensation: [{ type: 'non_cash', instrument_type: 'NSO', quantity: 65010, security_class: 'Common Stock', reference_valuation_per_share: 0.07,
+        vesting: { schedule_type: 'cliff_linear', vesting_start: '2026-03-09', cliff_fraction: '1/4', total_vesting_months: 48 } }] }] }] };
+
+  it('preserves them in the audit payload for every record kind', () => {
+    commit(withExtras);
+    const detail = db.getCompany(db.listCompanies('Kapalya')[0].id)!;
+    const payload = (id: number, table: string) => JSON.parse(db.db.prepare(`SELECT extracted_data_json FROM ${table} WHERE id=?`).pluck().get(id) as string).unmapped_fields;
+    expect(payload(detail.id, 'companies')).toEqual({ dba: 'ArmorxAI', governing_law: 'Delaware' });
+    expect(payload(detail.positions[0].id, 'positions')).toEqual({ title: 'Advisory Board Member', time_commitment: '2 hours per month' });
+    expect(payload(detail.positions[0].compensation[0].id, 'compensation')).toEqual({ security_class: 'Common Stock', reference_valuation_per_share: 0.07 });
+    expect(payload(detail.positions[0].compensation[0].active_vesting_schedule!.id, 'vesting_schedules')).toEqual({ cliff_fraction: '1/4', total_vesting_months: 48 });
+  });
+
+  it('names them and shows their values in the review plan before anything is committed', () => {
+    const messages = preview(withExtras).warnings.filter((warning) => warning.kind === 'unmapped').map((warning) => warning.message);
+    expect(messages).toContain('2 fields kept but not tracked — dba: ArmorxAI; governing_law: Delaware');
+    expect(messages.join(' ')).toContain('security_class: Common Stock');
+    expect(preview(withExtras).warnings.map((warning) => warning.path)).toContain('file.companies[0].positions[0].compensation[0].vesting');
+  });
+
+  it('leaves user-written notes alone, so an extraction cannot overwrite them or force a conflict', () => {
+    const company = db.createCompany({ ...companyInput('Kapalya Inc.'), notes: 'My own note' });
+    const plan = commit(withExtras);
+    expect(plan.counts.conflict).toBe(0);
+    expect(db.getCompany(company.id)!.notes).toBe('My own note');
+  });
+
+  it('keeps a supplied extracted_data payload alongside the untracked fields', () => {
+    commit({ schema: IMPORT_SCHEMA_ID, schema_version: 1, companies: [{ name: 'Alpha', positions: [{ status: 'current', position_type: 'advisor', compensation: [{ type: 'cash', amount: 100, frequency: 'annual', extracted_data: { clause: '3.1' }, rogue: 'value' }] }] }] });
+    const detail = db.getCompany(db.listCompanies('Alpha')[0].id)!;
+    expect(JSON.parse(db.db.prepare('SELECT extracted_data_json FROM compensation WHERE id=?').pluck().get(detail.positions[0].compensation[0].id) as string)).toEqual({ clause: '3.1', unmapped_fields: { rogue: 'value' } });
+  });
+
+  it('says nothing when the file uses only schema fields', () => {
+    expect(preview(importFile()).warnings).toEqual([]);
+  });
+});
+
+describe('import: the published JSON Schema', () => {
+  const schemaFile = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'board-tracker.import.schema.json'), 'utf8'));
+
+  it('is checked in exactly as the app generates it, so the saved file matches the parser', () => {
+    expect(`${JSON.stringify(schemaFile, null, 2)}\n`).toBe(importJsonSchemaText());
+  });
+
+  it('publishes the same enumerated values the parser enforces', () => {
+    const company = schemaFile.properties.companies.items;
+    const position = company.properties.positions.items;
+    const compensation = position.properties.compensation.items;
+    expect(position.properties.status.enum).toEqual(positionStatuses);
+    expect(position.properties.position_type.enum).toEqual(positionTypes);
+    expect(compensation.properties.type.enum).toEqual(compensationTypes);
+    expect(compensation.properties.frequency.enum).toEqual([...frequencies, null]);
+    expect(compensation.properties.vesting.properties.schedule_type.enum).toEqual(scheduleTypes);
+    expect(compensation.properties.vesting.properties.cadence.enum).toEqual([...cadences, null]);
+    expect(compensation.properties.documents.items.properties.status.enum).toEqual(documentStatuses);
+    expect(schemaFile.properties.schema.const).toBe(IMPORT_SCHEMA_ID);
+    expect(schemaFile.properties.schema_version.const).toBe(IMPORT_SCHEMA_VERSION);
+  });
+
+  it('describes vesting as one object, which is the mistake it exists to prevent', () => {
+    const vesting = schemaFile.properties.companies.items.properties.positions.items.properties.compensation.items.properties.vesting;
+    expect(vesting.type).toBe('object');
+    expect(vesting.description).toContain('not an array');
+    expect(vesting.properties.vesting_start.description).toContain('vesting commencement date');
+  });
+});
+
+describe('import: the ArmorxAI extraction that v0.4.1 could not read', () => {
+  const original = fs.readFileSync(path.join(__dirname, 'fixtures', 'armorxai-original.json'), 'utf8');
+
+  it('now fails once, on the only thing a human has to decide, instead of four times on field names', () => {
+    let message = '';
+    try { db.previewExtractedImport(original, 'armorxai.json'); } catch (error) { message = (error as Error).message; }
+    expect(message).toMatch(/^Found 1 problem in this file:/);
+    expect(message).toContain('vesting.schedule_type');
+    expect(message).toContain('Found "cliff_then_monthly"');
+  });
+
+  it('reads the whole grant once that one value is corrected, losing nothing', () => {
+    const corrected = original.replace('"cliff_then_monthly"', '"cliff_linear"');
+    const plan = db.commitExtractedImport(corrected, 'armorxai.json');
+    expect(plan.counts).toMatchObject({ conflict: 0, blocked: 0 });
+    const detail = db.getCompany(db.listCompanies('Kapalya')[0].id)!;
+    const grant = detail.positions[0].compensation[0];
+    // v0.4.1 dropped every one of these, most damagingly vesting_start, which the dashboard's
+    // percent-vested figure is computed from.
+    expect(grant).toMatchObject({ type: 'non_cash', quantity: 65010, instrument_type_name: 'non-statutory stock option' });
+    expect(grant.active_vesting_schedule).toMatchObject({ schedule_type: 'cliff_linear', vesting_start: '2026-03-09', cliff_date: '2027-03-09', cadence: 'monthly' });
+    // The file states total_vesting_months: 48 but no vesting_end, and the schema has no field for a
+    // duration, so the percentage stays uncalculable rather than being back-derived. The 48 is kept.
+    expect(grant.vesting_summary).toMatchObject({ kind: 'not_calculable' });
+    expect(JSON.parse(db.db.prepare('SELECT extracted_data_json FROM vesting_schedules WHERE compensation_id=?').pluck().get(grant.id) as string).unmapped_fields).toMatchObject({ total_vesting_months: 48, cliff_fraction: '1/4' });
+    const kept = plan.warnings.filter((warning) => warning.kind === 'unmapped');
+    expect(kept.length).toBeGreaterThan(3);
+    expect(db.db.prepare('SELECT COUNT(*) FROM documents').pluck().get()).toBe(5);
+  });
+
+  it('refuses to infer the exercise price, and surfaces the number it declined to use', () => {
+    const plan = db.commitExtractedImport(original.replace('"cliff_then_monthly"', '"cliff_linear"'), 'armorxai.json');
+    const grant = db.getCompany(db.listCompanies('Kapalya')[0].id)!.positions[0].compensation[0];
+    // The file gives "reference_valuation_per_share": 0.07 under a "latest 409A valuation" basis and
+    // says only that the exercise price is fair market value at grant. Those are not the same claim,
+    // so grant_price stays empty for a human to fill in — but the number is kept and shown, not lost.
+    expect(grant.grant_price).toBeNull();
+    const kept = JSON.parse(db.db.prepare('SELECT extracted_data_json FROM compensation WHERE id=?').pluck().get(grant.id) as string).unmapped_fields;
+    expect(kept).toMatchObject({ reference_valuation_per_share: 0.07, reference_valuation_basis: 'latest 409A valuation', exercise_price_basis: 'fair market value at time of grant' });
+    expect(plan.warnings.map((warning) => warning.message).join(' ')).toContain('reference_valuation_per_share: 0.07');
   });
 });
