@@ -264,6 +264,7 @@ function ResearchModal({ detail, close }: { detail: CompanyDetail; close: () => 
   const prompt = companyResearchPrompt(detail.name, detail.website);
   const copy = async () => { await window.boardTracker.companies.copyResearchPrompt(detail.name, detail.website); setCopied(true); setTimeout(() => setCopied(false), 2500); };
   const saveSchema = async () => { const path = await window.boardTracker.extractedImport.saveSchema(); if (path) setSaved(path); };
+  useBackgroundScrollLock();
   return <div className="modal-backdrop" role="presentation"><section className="modal research-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div className="modal-header"><h2 id="modal-title">Research {detail.name}</h2><button onClick={close} aria-label="Close dialog">×</button></div>
     <div>
@@ -301,6 +302,26 @@ function vestingEndNote(schedule: VestingSchedule | null | undefined): string {
   if (!end) return '';
   if (!schedule?.vesting_end_is_derived) return ` · Ends ${date(end)}`;
   return ` · Ends ${date(end)}, from a ${schedule.duration_months}-month term`;
+}
+
+/**
+ * Hold the page still while a dialog is open.
+ *
+ * Without this, a wheel over the dialog scrolls the dialog until it reaches its end and then
+ * chains through to the page behind it. On Windows that also dismisses an open native select or
+ * date picker, which reads as "the dropdown ignored my click". Hiding the overflow leaves a
+ * scrollbar-width gap, so pad the difference back to stop the layout jumping as dialogs open.
+ */
+function useBackgroundScrollLock() {
+  useEffect(() => {
+    const { body, documentElement } = document;
+    const gutter = window.innerWidth - documentElement.clientWidth;
+    const overflow = body.style.overflow;
+    const paddingRight = body.style.paddingRight;
+    body.style.overflow = 'hidden';
+    if (gutter > 0) body.style.paddingRight = `${gutter}px`;
+    return () => { body.style.overflow = overflow; body.style.paddingRight = paddingRight; };
+  }, []);
 }
 
 function CompensationRow({ compensation, edit, remove }: { compensation: Compensation; edit: () => void; remove: () => void }) {
@@ -358,6 +379,7 @@ function ModalForm({ modal, detail, instrumentTypes, close, openInstrumentTypes,
       }
     } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
   };
+  useBackgroundScrollLock();
   return <div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-header"><h2 id="modal-title">{heading}</h2><button onClick={close} aria-label="Close dialog">×</button></div><form onSubmit={onSubmit}>
     {modal.kind === 'company' && <><label>Company name<input name="name" required value={companyName} onChange={(event) => setCompanyName(event.target.value)} /></label>{company && companyName.trim() && companyName.trim().toLowerCase() !== company.name.toLowerCase() && <p className="rename-note" role="status">“{company.name}” will be kept as a former name, so imports written against it still match this company.</p>}<Field label="Sector" name="sector" defaultValue={company?.sector} /><Field label="Website" name="website" defaultValue={company?.website} /><Field label="Board size" name="board_size" type="number" min="0" defaultValue={company?.board_size ?? ''} /><Field label="Business summary" name="business_summary" area defaultValue={company?.business_summary} /><Field label="Other board members" name="other_board_members" area defaultValue={company?.other_board_members} /><Field label="Meeting cadence" name="meeting_cadence" defaultValue={company?.meeting_cadence} /><Field label="Notes" name="notes" area defaultValue={company?.notes} /></>}
     {modal.kind === 'position' && <><p className="form-context">Company: <strong>{detail?.name}</strong></p><label>Status<select name="status" value={status} onChange={(event) => setStatus(event.target.value as PositionStatus)}><option value="current">Current</option><option value="former">Former</option><option value="potential">Potential</option></select></label><label>Position type<select name="position_type" defaultValue={position?.position_type ?? 'governing_board'}><option value="governing_board">Governing board</option><option value="advisory_board">Advisory board</option><option value="advisor">Advisor</option></select></label><Field label="Start date" name="start_date" type="date" defaultValue={position?.start_date} /><Field label="End date" name="end_date" type="date" defaultValue={position?.end_date} />{status === 'potential' && <Field label="Expected decision date" name="expected_decision_date" type="date" defaultValue={position?.expected_decision_date} />}<Field label="Notes" name="notes" area defaultValue={position?.notes} /></>}

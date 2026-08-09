@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.1] — 2026-08-09
+
+### Fixed
+- **Fields in a dialog no longer ignore clicks.** Scrolling inside a dialog scrolled the dialog
+  until it reached its end and then carried on scrolling the page behind it. On Windows that scroll
+  dismisses an open dropdown or date picker, so the field looked like it had ignored the click —
+  the intermittent "dropdowns are unclickable" behaviour reported after v0.3.0. The page is now
+  held still while a dialog is open, and a wheel that reaches the end of a dialog stops there.
+- The page keeps its scroll position and does not jump sideways when a dialog opens or closes; the
+  space the scrollbar occupied is padded back.
+
 ## [0.6.0] — 2026-08-09
 
 Most board agreements state a vesting term rather than a completion date — "vesting over 48 months
