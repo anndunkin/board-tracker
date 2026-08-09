@@ -1,7 +1,8 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
+import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { BoardTrackerDatabase } from './database';
+import { EXTRACTION_PROMPT } from '../shared/extraction-prompt';
 let database: BoardTrackerDatabase;
 const seedPath = (): string => app.isPackaged ? path.join(process.resourcesPath, 'seed_data.json') : path.join(app.getAppPath(), 'assets', 'seed_data.json');
 const importSeedData = (): { inserted: number; skipped: number } => database.importSeedCompanies(JSON.parse(fs.readFileSync(seedPath(), 'utf8')));
@@ -17,6 +18,7 @@ function registerHandlers(): void {
   ipcMain.handle('documents:pick-file', async (event) => { const parent = BrowserWindow.fromWebContents(event.sender); const result = parent ? await dialog.showOpenDialog(parent, { properties: ['openFile'] }) : await dialog.showOpenDialog({ properties: ['openFile'] }); return result.canceled ? null : result.filePaths[0] ?? null; });
   ipcMain.handle('documents:open', async (_e, filePath: unknown) => { if (typeof filePath !== 'string' || !filePath.trim()) throw new Error('File path is required.'); const error = await shell.openPath(filePath); return error ? { ok: false, error } : { ok: true }; });
   ipcMain.handle('seed:import', () => importSeedData());
+  ipcMain.handle('extracted-import:copy-prompt', () => { clipboard.writeText(EXTRACTION_PROMPT); return EXTRACTION_PROMPT; });
   ipcMain.handle('extracted-import:pick-file', async (event) => { const parent = BrowserWindow.fromWebContents(event.sender); const options: Electron.OpenDialogOptions = { properties: ['openFile'], filters: [{ name: 'Board Tracker import', extensions: ['json'] }] }; const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options); const filePath = result.canceled ? null : result.filePaths[0] ?? null; if (!filePath) return null; const stats = fs.statSync(filePath); if (!stats.isFile()) throw new Error('The selected item is not a file.'); if (stats.size > 5 * 1024 * 1024) throw new Error('The import file must be 5 MB or smaller.'); return { file_path: filePath, file_name: path.basename(filePath), contents: fs.readFileSync(filePath, 'utf8') }; });
   ipcMain.handle('extracted-import:preview', (_e, contents: string, sourceLabel: string, selections) => database.previewExtractedImport(contents, sourceLabel, selections ?? {}));
   ipcMain.handle('extracted-import:commit', (_e, contents: string, sourceLabel: string, selections) => database.commitExtractedImport(contents, sourceLabel, selections ?? {}));

@@ -6,6 +6,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { companyInput, documentInput, importFile, nonCashInput, positionInput, testDatabase } from './helpers';
 import type { BoardTrackerDatabase } from '../src/main/database';
 import type { ImportOperation, ImportPlan } from '../src/shared/types';
+import { EXTRACTION_PROMPT } from '../src/shared/extraction-prompt';
+import { IMPORT_SCHEMA_ID, IMPORT_SCHEMA_VERSION } from '../src/main/import-schema';
 
 let db: BoardTrackerDatabase; let cleanup: () => void;
 beforeEach(() => ({ db, cleanup } = testDatabase())); afterEach(() => cleanup());
@@ -65,6 +67,37 @@ describe('import: end-to-end mapping of an extracted file', () => {
   it('flags missing documents so they appear on the dashboard', () => {
     commit(importFile({ companies: [{ name: 'Open Origin', documents: [{ document_type: 'confirmation_of_shares', status: 'missing', description: 'Referenced in section 4 but not provided' }] }] }));
     expect(db.dashboard().missing_documents).toEqual([expect.objectContaining({ company_name: 'Open Origin', document_type: 'confirmation_of_shares', status: 'missing', file_path: null })]);
+  });
+});
+
+describe('import: the extraction prompt', () => {
+  it('is the same text the docs publish, so the button and the docs cannot drift apart', () => {
+    const docs = fs.readFileSync(path.join(__dirname, '..', 'docs', 'import-schema.md'), 'utf8');
+    const quoted = docs.split('\n').filter((line) => line.startsWith('> ')).map((line) => line.slice(2).trim()).join(' ');
+    expect(quoted).toBe(EXTRACTION_PROMPT);
+  });
+
+  it('names the schema and version the parser actually accepts', () => {
+    expect(EXTRACTION_PROMPT).toContain(IMPORT_SCHEMA_ID);
+    expect(EXTRACTION_PROMPT).toContain(`schema version ${IMPORT_SCHEMA_VERSION}`);
+  });
+});
+
+describe('import: pasted JSON', () => {
+  it('is imported the same way a picked file is, since only the source label differs', () => {
+    const example = fs.readFileSync(path.join(__dirname, '..', 'docs', 'import-example.json'), 'utf8');
+    const pasted = db.previewExtractedImport(example, 'Pasted JSON');
+    expect(pasted.source.label).toBe('Pasted JSON');
+    expect(pasted.operations).toEqual(db.previewExtractedImport(example, 'import-example.json').operations);
+  });
+
+  it('reports a readable error when the pasted text is not JSON at all', () => {
+    expect(() => db.previewExtractedImport('I pasted the chat reply by mistake', 'Pasted JSON')).toThrow(/JSON/i);
+  });
+
+  it('tolerates the code fence people paste along with the JSON body', () => {
+    const example = fs.readFileSync(path.join(__dirname, '..', 'docs', 'import-example.json'), 'utf8');
+    expect(() => db.previewExtractedImport('```json\n' + example + '\n```', 'Pasted JSON')).not.toThrow();
   });
 });
 

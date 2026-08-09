@@ -172,10 +172,13 @@ function parseCompany(value: unknown, path: string): ImportCompanyNode {
 
 /** Parses raw JSON text produced by a Perplexity extraction session into a validated payload. */
 export function parseImportFile(contents: string, sourceLabel: string): ImportPayload {
-  if (typeof contents !== 'string' || !contents.trim()) throw new ValidationError('The import file is empty.');
+  if (typeof contents !== 'string' || !contents.trim()) throw new ValidationError('There is nothing to import — the file or pasted text is empty.');
   if (Buffer.byteLength(contents, 'utf8') > MAX_BYTES) throw new ValidationError('The import file must be 5 MB or smaller.');
+  // People paste the whole chat reply, fenced block and all. Strip a leading ```json fence rather
+  // than making them hand-edit it back out.
+  const body = contents.trim().replace(/^```[a-zA-Z]*\s*\n?/, '').replace(/\n?```$/, '').trim();
   let parsed: unknown;
-  try { parsed = JSON.parse(contents); } catch { throw new ValidationError('The import file is not valid JSON.'); }
+  try { parsed = JSON.parse(body); } catch { throw new ValidationError('This is not valid JSON. Paste or load the JSON object the extraction produced, without the surrounding chat reply.'); }
   return parseImportPayload(parsed, sourceLabel);
 }
 

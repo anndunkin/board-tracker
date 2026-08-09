@@ -55,5 +55,5 @@ export interface BoardTrackerApi {
   vestingSchedules: { create: (input: VestingScheduleInput) => Promise<VestingSchedule>; update: (id: number, input: VestingScheduleInput) => Promise<VestingSchedule>; delete: (id: number) => Promise<void>; };
   documents: { create: (input: DocumentInput) => Promise<Document>; update: (id: number, input: DocumentInput) => Promise<Document>; delete: (id: number) => Promise<void>; pickFile: () => Promise<string | null>; open: (filePath: string) => Promise<DocumentOpenResult>; };
   importSeedData: () => Promise<{ inserted: number; skipped: number }>;
-  extractedImport: { pickFile: () => Promise<ImportFileResult | null>; preview: (contents: string, sourceLabel: string, selections?: ImportSelections) => Promise<ImportPlan>; commit: (contents: string, sourceLabel: string, selections?: ImportSelections) => Promise<ImportPlan>; batches: () => Promise<ImportBatch[]>; };
+  extractedImport: { pickFile: () => Promise<ImportFileResult | null>; preview: (contents: string, sourceLabel: string, selections?: ImportSelections) => Promise<ImportPlan>; commit: (contents: string, sourceLabel: string, selections?: ImportSelections) => Promise<ImportPlan>; batches: () => Promise<ImportBatch[]>; copyPrompt: () => Promise<string>; };
 }

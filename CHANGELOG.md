@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.1] — 2026-08-09
+
+### Added
+- **Copy extraction prompt** button on the import screen. It puts the documented extraction prompt on your clipboard so you can paste it straight into a Perplexity session with the agreement, instead of digging it out of `docs/import-schema.md`. A test asserts the button and the docs carry identical text, so they cannot drift apart.
+- **Paste JSON** box, so an import no longer requires saving a file first. Pasted text goes through exactly the same parser, review plan, and commit path as a picked file; only the source label differs. A surrounding ```` ```json ```` code fence is stripped automatically, since that is how the JSON usually arrives.
+
+### Fixed
+- Import screen cards had no inner padding, leaving their contents flush against the card edge. They now match the padding used elsewhere in the app.
+- A failed parse left an empty "Review before commit" card on screen below the error. The review card is now hidden until there is a plan to show.
+- Parse errors said "the import file" even when the content had been pasted, and did not say what to do. The wording is now source-aware and explains that the JSON object is wanted, not the surrounding chat reply.
+
 ## [0.4.0] — 2026-08-09
 
 ### Added

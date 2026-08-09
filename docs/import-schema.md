@@ -1,8 +1,13 @@
 # Board Tracker import schema (v1)
 
 Board Tracker never calls an AI service. Extraction happens in a **Perplexity session**: you upload an
-agreement there, ask for a Board Tracker import file, save the JSON it produces, then load that file
-from **Import extracted data** in the app. Nothing is written until you review the plan and confirm.
+agreement there, ask for a Board Tracker import file, then bring the JSON it produces into
+**Import extracted data** in the app — either paste it straight into the paste box or save it as a
+`.json` file and pick it. Nothing is written until you review the plan and confirm.
+
+The **Copy extraction prompt** button on that screen puts the prompt below on your clipboard, so you
+do not have to come back to this file for it. When pasting, a surrounding ```` ```json ```` fence is
+stripped for you; anything else around the JSON object is not.
 
 This document is the contract. A file that follows it will import cleanly; a file that does not is
 rejected with the exact JSON path of the problem (for example
@@ -164,6 +169,8 @@ Text is trimmed and control characters are stripped on the way in.
 ---
 
 ## Prompt to use in a Perplexity session
+
+This is the exact text behind the **Copy extraction prompt** button; a test keeps the two identical.
 
 > Read the attached board or advisory agreement and produce a Board Tracker import file. Output only
 > JSON matching the `board-tracker.import` schema version 1: a top-level object with `schema`,

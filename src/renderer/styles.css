@@ -29,3 +29,12 @@
 .import-commit small{color:var(--muted);font-size:var(--text-xs)}
 .upcoming-row.static{cursor:default;text-align:left}
 .import-commit .button[disabled]{opacity:.5;cursor:not-allowed;box-shadow:none}
+.import-steps{margin:0 0 12px;padding-left:20px;color:var(--muted);font-size:var(--text-sm);line-height:1.6}.import-steps li{margin-bottom:4px}.import-steps code{background:var(--surface-alt);padding:1px 5px;border-radius:5px;font-size:var(--text-xs)}
+.import-prompt-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:4px}.import-prompt-actions small{color:var(--muted);font-size:var(--text-xs)}
+.import-paste-label{display:block;margin-bottom:8px;color:var(--muted);font-size:var(--text-sm);line-height:1.5}
+.import-paste-box{width:100%;box-sizing:border-box;resize:vertical;min-height:180px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-alt);color:var(--text);font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:var(--text-xs);line-height:1.55;white-space:pre;overflow:auto}
+.import-paste-box:focus{outline:2px solid var(--primary);outline-offset:1px}
+.import-paste .import-commit{border-top:none;margin-top:12px;padding-top:0}
+.import-intro{padding:22px 24px}
+.import-problem,.import-result{padding:18px 22px}
+.import-body{padding:0 24px 22px}

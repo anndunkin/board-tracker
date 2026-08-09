@@ -77,6 +77,9 @@ function ImportExtractedData({ notify, onImported }: { notify: (message: string)
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
   const [committed, setCommitted] = useState<ImportPlan | null>(null);
+  const [pasted, setPasted] = useState('');
+  const [showPaste, setShowPaste] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [batches, setBatches] = useState<ImportBatch[]>([]);
   const refreshBatches = () => window.boardTracker.extractedImport.batches().then(setBatches).catch(() => undefined);
   useEffect(() => { refreshBatches(); }, []);
@@ -94,15 +97,17 @@ function ImportExtractedData({ notify, onImported }: { notify: (message: string)
   }, [file, selections]);
 
   const choose = async () => {
-    try { const picked = await window.boardTracker.extractedImport.pickFile(); if (!picked) return; setCommitted(null); setSelections({}); setPlan(null); setProblem(''); setFile(picked); }
+    try { const picked = await window.boardTracker.extractedImport.pickFile(); if (!picked) return; setCommitted(null); setSelections({}); setPlan(null); setProblem(''); setPasted(''); setShowPaste(false); setFile(picked); }
     catch (error) { setProblem(errorText(error)); }
   };
-  const reset = () => { setFile(null); setPlan(null); setSelections({}); setProblem(''); setCommitted(null); };
+  const copyPrompt = async () => { try { await window.boardTracker.extractedImport.copyPrompt(); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch (error) { setProblem(errorText(error)); } };
+  const reviewPasted = () => { const contents = pasted.trim(); if (!contents) return; setCommitted(null); setSelections({}); setPlan(null); setProblem(''); setFile({ file_path: '', file_name: 'Pasted JSON', contents }); };
+  const reset = () => { setFile(null); setPlan(null); setSelections({}); setProblem(''); setCommitted(null); setPasted(''); setShowPaste(false); };
   const setAll = (value: boolean) => setSelections(Object.fromEntries((plan?.operations ?? []).filter((operation) => operation.action !== 'skip' && operation.action !== 'blocked').map((operation) => [operation.key, value])));
   const runImport = async () => {
     if (!file || !plan?.selected_count) return;
     setBusy(true);
-    try { const result = await window.boardTracker.extractedImport.commit(file.contents, file.file_name, selections); setCommitted(result); setFile(null); setPlan(null); setSelections({}); refreshBatches(); onImported(); notify(`Imported ${file.file_name}: ${result.counts.create} created, ${result.counts.update + result.counts.conflict} updated.`); }
+    try { const result = await window.boardTracker.extractedImport.commit(file.contents, file.file_name, selections); setCommitted(result); setFile(null); setPlan(null); setSelections({}); setPasted(''); setShowPaste(false); refreshBatches(); onImported(); notify(`Imported ${file.file_name}: ${result.counts.create} created, ${result.counts.update + result.counts.conflict} updated.`); }
     catch (error) { setProblem(errorText(error)); }
     finally { setBusy(false); }
   };
@@ -111,20 +116,33 @@ function ImportExtractedData({ notify, onImported }: { notify: (message: string)
   const actionable = plan ? plan.counts.create + plan.counts.update + plan.counts.conflict : 0;
 
   return <>
-    <header className="page-header"><div><p className="eyebrow">Perplexity-assisted intake</p><h1>Import extracted data</h1></div><div className="header-actions">{file && <button className="button secondary" onClick={reset} disabled={busy}>Clear</button>}<button className="button" onClick={choose} disabled={busy}>{file ? 'Choose a different file' : 'Choose JSON file'}</button></div></header>
+    <header className="page-header"><div><p className="eyebrow">Perplexity-assisted intake</p><h1>Import extracted data</h1></div><div className="header-actions">{(file || pasted) && <button className="button secondary" onClick={reset} disabled={busy}>Clear</button>}<button className="button secondary" onClick={() => setShowPaste((current) => !current)} disabled={busy} aria-expanded={showPaste}>{showPaste ? 'Hide paste box' : 'Paste JSON instead'}</button><button className="button" onClick={choose} disabled={busy}>{file ? 'Choose a different file' : 'Choose JSON file'}</button></div></header>
 
     <section className="content-card import-intro">
-      <p>Extract an agreement in a Perplexity session, save the result as a Board Tracker import file, then review every change here before anything is written. Board Tracker never sends your data anywhere — it only reads the JSON file you pick.</p>
-      <p className="import-hint">The file format is documented in <code>docs/import-schema.md</code>, with a worked example in <code>docs/import-example.json</code>.</p>
+      <ol className="import-steps">
+        <li>Start a Perplexity session, attach the agreement, and paste the extraction prompt.</li>
+        <li>Copy the JSON it returns, or save it as a <code>.json</code> file.</li>
+        <li>Paste or load it here, review every change, then commit the ones you want.</li>
+      </ol>
+      <p className="import-hint">Board Tracker does not read documents and makes no network calls — the extraction happens in your Perplexity session, and the app only reads the JSON you give it. The format is documented in <code>docs/import-schema.md</code>, with a worked example in <code>docs/import-example.json</code>.</p>
+      <div className="import-prompt-actions"><button className="button secondary" onClick={copyPrompt} disabled={busy}>{copied ? 'Prompt copied' : 'Copy extraction prompt'}</button>{copied && <small role="status">Paste it into a Perplexity session together with the agreement.</small>}</div>
     </section>
 
-    {problem && <div className="content-card import-problem" role="alert"><strong>This file could not be read</strong><p>{problem}</p></div>}
+    {showPaste && <section className="content-card import-paste">
+      <div className="section-heading"><div><p className="eyebrow">No file needed</p><h2>Paste JSON</h2></div></div>
+      <div className="import-body"><label className="import-paste-label" htmlFor="import-paste-box">Paste the JSON from your Perplexity session and review it before anything is written.</label>
+      <textarea id="import-paste-box" className="import-paste-box" value={pasted} onChange={(event) => setPasted(event.target.value)} placeholder={'{\n  "schema": "board-tracker.import",\n  "schema_version": 1,\n  "companies": [ ... ]\n}'} spellCheck={false} rows={10} />
+      <div className="import-commit"><button className="button" onClick={reviewPasted} disabled={busy || !pasted.trim()}>Review pasted JSON</button>{!pasted.trim() && <small>Paste the JSON above to review it.</small>}</div></div>
+    </section>}
+
+    {problem && <div className="content-card import-problem" role="alert"><strong>{pasted ? 'This JSON could not be read' : 'This file could not be read'}</strong><p>{problem}</p></div>}
 
     {committed && <div className="content-card import-result" role="status"><strong>Import complete</strong><p>{committed.counts.create} record{committed.counts.create === 1 ? '' : 's'} created and {committed.counts.update + committed.counts.conflict} updated from <code>{committed.source.label}</code>. The raw extraction payload was saved as batch #{committed.batch_id} for the audit trail.</p></div>}
 
-    {file && <section className="content-card">
+    {file && plan && <section className="content-card">
       <div className="section-heading"><div><p className="eyebrow">{file.file_name}</p><h2>Review before commit</h2>{plan && <p className="import-source">{[plan.source.tool && `Extracted with ${plan.source.tool}`, plan.generated_at && `generated ${date(plan.generated_at)}`, plan.source.notes].filter(Boolean).join(' · ')}</p>}</div>{plan && actionable > 0 && <div className="header-actions"><button className="button secondary" onClick={() => setAll(true)} disabled={busy}>Select all</button><button className="button secondary" onClick={() => setAll(false)} disabled={busy}>Select none</button></div>}</div>
 
+      <div className="import-body">
       {plan && <div className="import-counts">{(['create', 'update', 'conflict', 'skip', 'blocked'] as ImportOperationAction[]).filter((action) => plan.counts[action] > 0).map((action) => <span key={action} className={`badge import-${action}`}>{plan.counts[action]} {actionLabels[action].toLowerCase()}</span>)}</div>}
 
       {plan && plan.counts.conflict > 0 && <p className="import-warning" role="note">Conflicts are switched off by default because applying them would replace a value you already have. Tick one only after checking the before and after values below.</p>}
@@ -147,6 +165,7 @@ function ImportExtractedData({ notify, onImported }: { notify: (message: string)
       </div>)}
 
       {plan && actionable > 0 && <div className="import-commit"><button className="button" onClick={runImport} disabled={busy || !plan.selected_count}>{busy ? 'Checking…' : `Import ${plan.selected_count} selected change${plan.selected_count === 1 ? '' : 's'}`}</button>{!plan.selected_count && <small>Select at least one change to import.</small>}</div>}
+      </div>
     </section>}
 
     <section className="content-card"><div className="section-heading"><div><p className="eyebrow">Audit trail</p><h2>Previous imports</h2></div></div>{batches.length ? <div className="upcoming-list">{batches.map((batch) => <div className="upcoming-row static" key={batch.id}><span><strong>#{batch.id} · {batch.source_label}</strong><small>{[batch.source_tool, batch.generated_at && `generated ${date(batch.generated_at)}`, batch.summary_json && summarizeBatch(batch.summary_json)].filter(Boolean).join(' · ')}</small></span><time>{new Date(batch.imported_at.replace(' ', 'T') + 'Z').toLocaleString()}</time></div>)}</div> : <Empty title="No imports yet" text="Committed import files and their raw extraction payloads are listed here." />}</section>
