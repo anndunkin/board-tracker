@@ -30,6 +30,22 @@ export interface MissingDocument extends Document { company_name: string; }
 export interface DashboardData { counts: Record<PositionStatus, number>; upcoming: Array<Position & { company_name: string }>; upcoming_vesting: UpcomingVesting[]; missing_documents: MissingDocument[]; }
 export interface DocumentOpenResult { ok: boolean; error?: string; }
 
+export type ImportOperationKind = 'company' | 'company_fields' | 'position' | 'compensation' | 'vesting' | 'document' | 'instrument_type';
+export type ImportOperationAction = 'create' | 'update' | 'conflict' | 'skip' | 'blocked';
+export interface ImportChange { field: string; from: string | null; to: string; overwrite: boolean; }
+export interface ImportOperation { key: string; kind: ImportOperationKind; action: ImportOperationAction; context: string; label: string; changes: ImportChange[]; reason: string; default_selected: boolean; selected: boolean; }
+export interface ImportSource { label: string; tool: string | null; reference: string | null; notes: string | null; }
+export interface ImportVestingNode { schedule_type: VestingScheduleType; cliff_date: string | null; vesting_start: string | null; vesting_end: string | null; cadence: VestingCadence | null; notes: string | null; }
+export interface ImportDocumentNode { document_type: string; status: DocumentStatus; file_path: string | null; file_name: string | null; description: string | null; document_date: string | null; extracted_data_json: string | null; }
+export interface ImportCompensationNode { type: CompensationType; amount: number | null; currency: string | null; frequency: CompensationFrequency | null; instrument_type: string | null; quantity: number | null; grant_price: number | null; grant_date: string | null; notes: string | null; vesting: ImportVestingNode | null; documents: ImportDocumentNode[]; extracted_data_json: string | null; }
+export interface ImportPositionNode { status: PositionStatus; position_type: PositionType; start_date: string | null; end_date: string | null; expected_decision_date: string | null; notes: string | null; compensation: ImportCompensationNode[]; documents: ImportDocumentNode[]; }
+export interface ImportCompanyNode { name: string; fields: { business_summary: string | null; sector: string | null; website: string | null; board_size: number | null; other_board_members: string | null; meeting_cadence: string | null; notes: string | null }; positions: ImportPositionNode[]; documents: ImportDocumentNode[]; }
+export interface ImportPayload { schema_version: number; generated_at: string | null; source: ImportSource; companies: ImportCompanyNode[]; payload_json: string; }
+export type ImportSelections = Record<string, boolean>;
+export interface ImportPlan { schema_version: number; source: ImportSource; generated_at: string | null; operations: ImportOperation[]; counts: Record<ImportOperationAction, number>; selected_count: number; batch_id?: number; }
+export interface ImportBatch { id: number; source_label: string; source_tool: string | null; source_reference: string | null; source_notes: string | null; schema_version: number; generated_at: string | null; summary_json: string | null; imported_at: string; }
+export interface ImportFileResult { file_path: string; file_name: string; contents: string; }
+
 export interface BoardTrackerApi {
   dashboard: () => Promise<DashboardData>;
   companies: { list: (search?: string) => Promise<Company[]>; get: (id: number) => Promise<CompanyDetail | null>; create: (input: CompanyInput) => Promise<Company>; update: (id: number, input: CompanyInput) => Promise<Company>; delete: (id: number) => Promise<void>; };
@@ -39,4 +55,5 @@ export interface BoardTrackerApi {
   vestingSchedules: { create: (input: VestingScheduleInput) => Promise<VestingSchedule>; update: (id: number, input: VestingScheduleInput) => Promise<VestingSchedule>; delete: (id: number) => Promise<void>; };
   documents: { create: (input: DocumentInput) => Promise<Document>; update: (id: number, input: DocumentInput) => Promise<Document>; delete: (id: number) => Promise<void>; pickFile: () => Promise<string | null>; open: (filePath: string) => Promise<DocumentOpenResult>; };
   importSeedData: () => Promise<{ inserted: number; skipped: number }>;
+  extractedImport: { pickFile: () => Promise<ImportFileResult | null>; preview: (contents: string, sourceLabel: string, selections?: ImportSelections) => Promise<ImportPlan>; commit: (contents: string, sourceLabel: string, selections?: ImportSelections) => Promise<ImportPlan>; batches: () => Promise<ImportBatch[]>; };
 }

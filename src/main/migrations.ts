@@ -19,6 +19,14 @@ const migrations = [
  CREATE INDEX IF NOT EXISTS idx_documents_company ON documents(company_id);
  CREATE INDEX IF NOT EXISTS idx_documents_position ON documents(position_id);
  CREATE INDEX IF NOT EXISTS idx_documents_compensation ON documents(compensation_id);
- CREATE INDEX IF NOT EXISTS idx_documents_status_company ON documents(status, company_id);`
+ CREATE INDEX IF NOT EXISTS idx_documents_status_company ON documents(status, company_id);`,
+`CREATE TABLE IF NOT EXISTS import_batches (id INTEGER PRIMARY KEY, source_label TEXT NOT NULL, source_tool TEXT, source_reference TEXT, source_notes TEXT, schema_version INTEGER NOT NULL, generated_at TEXT, payload_json TEXT NOT NULL, summary_json TEXT, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+ ALTER TABLE documents ADD COLUMN extracted_data_json TEXT;
+ ALTER TABLE documents ADD COLUMN import_batch_id INTEGER REFERENCES import_batches(id) ON DELETE SET NULL;
+ ALTER TABLE compensation ADD COLUMN extracted_data_json TEXT;
+ ALTER TABLE compensation ADD COLUMN import_batch_id INTEGER REFERENCES import_batches(id) ON DELETE SET NULL;
+ CREATE INDEX IF NOT EXISTS idx_documents_import_batch ON documents(import_batch_id);
+ CREATE INDEX IF NOT EXISTS idx_compensation_import_batch ON compensation(import_batch_id);
+ CREATE INDEX IF NOT EXISTS idx_import_batches_imported_at ON import_batches(imported_at DESC);`
 ];
 export function runMigrations(db: Database.Database): void { db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'); const applied = new Set((db.prepare('SELECT version FROM schema_version').all() as { version: number }[]).map((row) => row.version)); migrations.forEach((sql, index) => { const version = index + 1; if (!applied.has(version)) db.transaction(() => { db.exec(sql); db.prepare('INSERT INTO schema_version(version) VALUES (?)').run(version); })(); }); }

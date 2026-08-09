@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import type { Company, CompanyDetail, CompanyInput, Compensation, CompensationFrequency, CompensationInput, CompensationType, DashboardData, Document, DocumentInput, InstrumentType, InstrumentTypeInput, Position, PositionInput, PositionStatus, PositionType, VestingCadence, VestingSchedule, VestingScheduleInput, VestingScheduleType } from '../shared/types';
+import type { Company, CompanyDetail, CompanyInput, Compensation, CompensationFrequency, CompensationInput, CompensationType, DashboardData, Document, DocumentInput, ImportBatch, ImportFileResult, ImportOperation, ImportOperationAction, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, PositionStatus, PositionType, VestingCadence, VestingSchedule, VestingScheduleInput, VestingScheduleType } from '../shared/types';
 
 type Modal = null | { kind: 'company'; item?: Company } | { kind: 'position'; item?: Position } | { kind: 'compensation'; positionId: number; item?: Compensation } | { kind: 'instrument-type'; item?: InstrumentType } | { kind: 'document'; item?: Document; focusFile?: boolean };
 const documentTypes = ['board_agreement', 'offer_letter', 'grant_agreement', 'nda', 'confirmation_of_shares'];
@@ -11,7 +11,7 @@ const fileNameFromPath = (value: string) => value.split(/[\\/]/).pop() || value;
 const documentContext = (item: Document) => [item.position_type ? label(item.position_type) : null, item.compensation_type ? `${item.compensation_type === 'non_cash' ? `${quantity(item.compensation_quantity ?? null)} ${item.instrument_type_name || 'instrument'}` : 'Cash'} compensation` : null].filter(Boolean).join(' · ') || 'Company-level document';
 
 function App() {
-  const [view, setView] = useState<'dashboard' | 'companies' | 'instrument-types'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'companies' | 'instrument-types' | 'import'>('dashboard');
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [instrumentTypes, setInstrumentTypes] = useState<InstrumentType[]>([]);
@@ -50,16 +50,111 @@ function App() {
         <button className={view === 'dashboard' ? 'nav active' : 'nav'} onClick={() => { setDetail(null); setView('dashboard'); }}>Overview</button>
         <button className={view === 'companies' ? 'nav active' : 'nav'} onClick={() => { setDetail(null); setView('companies'); }}>Companies</button>
         <button className={view === 'instrument-types' ? 'nav active' : 'nav'} onClick={openInstrumentTypes}>Instrument types</button>
+        <button className={view === 'import' ? 'nav active' : 'nav'} onClick={() => { setDetail(null); setView('import'); }}>Import extracted data</button>
       </nav>
       <div className="side-bottom"><button className="nav" onClick={importSeed}>Import seed data</button><button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle color theme">{theme === 'dark' ? 'Light theme' : 'Dark theme'}</button></div>
     </aside>
     <main className="main">
       {message && <div className="toast" role="status">{message}<button onClick={() => setMessage('')} aria-label="Dismiss">×</button></div>}
       {openFailure && <div className="toast document-open-error" role="alert"><span><strong>{openFailure.file_name || label(openFailure.document_type)}</strong> may have moved. Re-link it or keep it as a missing-document reminder.</span><div><button className="toast-action" onClick={() => { setModal({ kind: 'document', item: openFailure, focusFile: true }); setOpenFailure(null); }}>Re-link</button><button className="toast-action" onClick={() => markMissing(openFailure)}>Mark missing</button><button onClick={() => setOpenFailure(null)} aria-label="Dismiss">×</button></div></div>}
-      {detail ? <CompanyDetailPage detail={detail} back={() => setDetail(null)} openModal={setModal} openDocument={openDocument} onDelete={() => { if (window.confirm(`Delete ${detail.name}? Its ${detail.positions.length} position(s), compensation, vesting schedules, and ${detail.documents.length} document link(s) will be deleted. The original files will not be deleted.`)) void mutate(() => window.boardTracker.companies.delete(detail.id), 'Company and related records deleted.').then(() => setDetail(null)); }} /> : view === 'dashboard' ? <Dashboard data={dashboard} showCompanies={() => setView('companies')} openCompany={openCompany} /> : view === 'companies' ? <Companies companies={companies} search={search} setSearch={setSearch} openCompany={openCompany} add={() => setModal({ kind: 'company' })} /> : <InstrumentTypes types={instrumentTypes} add={() => setModal({ kind: 'instrument-type' })} edit={(item) => setModal({ kind: 'instrument-type', item })} remove={(item) => { if (window.confirm(`Delete ${item.name}? This type cannot be deleted if it is in use by a non-cash compensation record.`)) void mutate(() => window.boardTracker.instrumentTypes.delete(item.id), 'Instrument type deleted.'); }} />}
+      {detail ? <CompanyDetailPage detail={detail} back={() => setDetail(null)} openModal={setModal} openDocument={openDocument} onDelete={() => { if (window.confirm(`Delete ${detail.name}? Its ${detail.positions.length} position(s), compensation, vesting schedules, and ${detail.documents.length} document link(s) will be deleted. The original files will not be deleted.`)) void mutate(() => window.boardTracker.companies.delete(detail.id), 'Company and related records deleted.').then(() => setDetail(null)); }} /> : view === 'dashboard' ? <Dashboard data={dashboard} showCompanies={() => setView('companies')} openCompany={openCompany} /> : view === 'companies' ? <Companies companies={companies} search={search} setSearch={setSearch} openCompany={openCompany} add={() => setModal({ kind: 'company' })} /> : view === 'import' ? <ImportExtractedData notify={setMessage} onImported={() => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); }} /> : <InstrumentTypes types={instrumentTypes} add={() => setModal({ kind: 'instrument-type' })} edit={(item) => setModal({ kind: 'instrument-type', item })} remove={(item) => { if (window.confirm(`Delete ${item.name}? This type cannot be deleted if it is in use by a non-cash compensation record.`)) void mutate(() => window.boardTracker.instrumentTypes.delete(item.id), 'Instrument type deleted.'); }} />}
     </main>
     {modal && <ModalForm modal={modal} detail={detail} instrumentTypes={instrumentTypes} close={() => setModal(null)} openInstrumentTypes={openInstrumentTypes} submit={mutate} />}
   </div>;
+}
+
+const actionLabels: Record<ImportOperationAction, string> = { create: 'New', update: 'Fill in', conflict: 'Conflict', skip: 'Already there', blocked: 'Blocked' };
+const kindLabels: Record<ImportOperation['kind'], string> = { company: 'Company', company_fields: 'Company profile', position: 'Position', compensation: 'Compensation', vesting: 'Vesting', document: 'Document', instrument_type: 'Instrument type' };
+const enumFields = new Set(['type', 'status', 'position_type', 'frequency', 'schedule_type', 'cadence', 'document_type']);
+const changeLabel = (field: string) => field === 'extracted_data_json' ? 'Extracted data' : label(field);
+const changeValue = (field: string, value: string) => field === 'extracted_data_json' ? 'Audit payload from the extraction' : enumFields.has(field) ? label(value) : value;
+const errorText = (error: unknown) => { const raw = error instanceof Error ? error.message : String(error); return raw.replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^(ValidationError|Error):\s*/, ''); };
+
+function ImportExtractedData({ notify, onImported }: { notify: (message: string) => void; onImported: () => void }) {
+  const [file, setFile] = useState<ImportFileResult | null>(null);
+  const [plan, setPlan] = useState<ImportPlan | null>(null);
+  const [selections, setSelections] = useState<ImportSelections>({});
+  const [problem, setProblem] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [committed, setCommitted] = useState<ImportPlan | null>(null);
+  const [batches, setBatches] = useState<ImportBatch[]>([]);
+  const refreshBatches = () => window.boardTracker.extractedImport.batches().then(setBatches).catch(() => undefined);
+  useEffect(() => { refreshBatches(); }, []);
+
+  // Re-previewing on every selection change keeps downstream "blocked" states honest when a parent is turned off.
+  useEffect(() => {
+    if (!file) return;
+    let cancelled = false;
+    setBusy(true);
+    window.boardTracker.extractedImport.preview(file.contents, file.file_name, selections)
+      .then((next) => { if (!cancelled) { setPlan(next); setProblem(''); } })
+      .catch((error) => { if (!cancelled) { setPlan(null); setProblem(errorText(error)); } })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [file, selections]);
+
+  const choose = async () => {
+    try { const picked = await window.boardTracker.extractedImport.pickFile(); if (!picked) return; setCommitted(null); setSelections({}); setPlan(null); setProblem(''); setFile(picked); }
+    catch (error) { setProblem(errorText(error)); }
+  };
+  const reset = () => { setFile(null); setPlan(null); setSelections({}); setProblem(''); setCommitted(null); };
+  const setAll = (value: boolean) => setSelections(Object.fromEntries((plan?.operations ?? []).filter((operation) => operation.action !== 'skip' && operation.action !== 'blocked').map((operation) => [operation.key, value])));
+  const runImport = async () => {
+    if (!file || !plan?.selected_count) return;
+    setBusy(true);
+    try { const result = await window.boardTracker.extractedImport.commit(file.contents, file.file_name, selections); setCommitted(result); setFile(null); setPlan(null); setSelections({}); refreshBatches(); onImported(); notify(`Imported ${file.file_name}: ${result.counts.create} created, ${result.counts.update + result.counts.conflict} updated.`); }
+    catch (error) { setProblem(errorText(error)); }
+    finally { setBusy(false); }
+  };
+
+  const groups = (plan?.operations ?? []).reduce<Array<{ context: string; operations: ImportOperation[] }>>((accumulator, operation) => { const group = accumulator.find((entry) => entry.context === operation.context); if (group) group.operations.push(operation); else accumulator.push({ context: operation.context, operations: [operation] }); return accumulator; }, []);
+  const actionable = plan ? plan.counts.create + plan.counts.update + plan.counts.conflict : 0;
+
+  return <>
+    <header className="page-header"><div><p className="eyebrow">Perplexity-assisted intake</p><h1>Import extracted data</h1></div><div className="header-actions">{file && <button className="button secondary" onClick={reset} disabled={busy}>Clear</button>}<button className="button" onClick={choose} disabled={busy}>{file ? 'Choose a different file' : 'Choose JSON file'}</button></div></header>
+
+    <section className="content-card import-intro">
+      <p>Extract an agreement in a Perplexity session, save the result as a Board Tracker import file, then review every change here before anything is written. Board Tracker never sends your data anywhere — it only reads the JSON file you pick.</p>
+      <p className="import-hint">The file format is documented in <code>docs/import-schema.md</code>, with a worked example in <code>docs/import-example.json</code>.</p>
+    </section>
+
+    {problem && <div className="content-card import-problem" role="alert"><strong>This file could not be read</strong><p>{problem}</p></div>}
+
+    {committed && <div className="content-card import-result" role="status"><strong>Import complete</strong><p>{committed.counts.create} record{committed.counts.create === 1 ? '' : 's'} created and {committed.counts.update + committed.counts.conflict} updated from <code>{committed.source.label}</code>. The raw extraction payload was saved as batch #{committed.batch_id} for the audit trail.</p></div>}
+
+    {file && <section className="content-card">
+      <div className="section-heading"><div><p className="eyebrow">{file.file_name}</p><h2>Review before commit</h2>{plan && <p className="import-source">{[plan.source.tool && `Extracted with ${plan.source.tool}`, plan.generated_at && `generated ${date(plan.generated_at)}`, plan.source.notes].filter(Boolean).join(' · ')}</p>}</div>{plan && actionable > 0 && <div className="header-actions"><button className="button secondary" onClick={() => setAll(true)} disabled={busy}>Select all</button><button className="button secondary" onClick={() => setAll(false)} disabled={busy}>Select none</button></div>}</div>
+
+      {plan && <div className="import-counts">{(['create', 'update', 'conflict', 'skip', 'blocked'] as ImportOperationAction[]).filter((action) => plan.counts[action] > 0).map((action) => <span key={action} className={`badge import-${action}`}>{plan.counts[action]} {actionLabels[action].toLowerCase()}</span>)}</div>}
+
+      {plan && plan.counts.conflict > 0 && <p className="import-warning" role="note">Conflicts are switched off by default because applying them would replace a value you already have. Tick one only after checking the before and after values below.</p>}
+
+      {plan && !actionable && <Empty title="Everything in this file is already recorded" text="No new records and no changes were found, so there is nothing to commit." />}
+
+      {groups.map((group) => <div className="import-group" key={group.context}>
+        <h3>{group.context}</h3>
+        {group.operations.map((operation) => {
+          const decidable = operation.action !== 'skip' && operation.action !== 'blocked';
+          return <div className={`import-row import-${operation.action}`} key={operation.key}>
+            <label className="import-choice">
+              <input type="checkbox" checked={operation.selected} disabled={!decidable || busy} onChange={(event) => setSelections((current) => ({ ...current, [operation.key]: event.target.checked }))} aria-label={`${actionLabels[operation.action]}: ${operation.label}`} />
+              <span><strong>{operation.label}</strong><small>{kindLabels[operation.kind]} · {operation.reason}</small></span>
+            </label>
+            <span className={`badge import-${operation.action}`}>{actionLabels[operation.action]}</span>
+            {operation.changes.length > 0 && <ul className="import-changes">{operation.changes.map((change) => <li key={change.field} className={change.overwrite ? 'overwrite' : undefined}><span className="import-field">{changeLabel(change.field)}</span>{change.from == null ? <span className="import-to">{changeValue(change.field, change.to)}</span> : <><span className="import-from">{changeValue(change.field, change.from)}</span><span aria-hidden="true"> → </span><span className="import-to">{changeValue(change.field, change.to)}</span></>}</li>)}</ul>}
+          </div>;
+        })}
+      </div>)}
+
+      {plan && actionable > 0 && <div className="import-commit"><button className="button" onClick={runImport} disabled={busy || !plan.selected_count}>{busy ? 'Checking…' : `Import ${plan.selected_count} selected change${plan.selected_count === 1 ? '' : 's'}`}</button>{!plan.selected_count && <small>Select at least one change to import.</small>}</div>}
+    </section>}
+
+    <section className="content-card"><div className="section-heading"><div><p className="eyebrow">Audit trail</p><h2>Previous imports</h2></div></div>{batches.length ? <div className="upcoming-list">{batches.map((batch) => <div className="upcoming-row static" key={batch.id}><span><strong>#{batch.id} · {batch.source_label}</strong><small>{[batch.source_tool, batch.generated_at && `generated ${date(batch.generated_at)}`, batch.summary_json && summarizeBatch(batch.summary_json)].filter(Boolean).join(' · ')}</small></span><time>{new Date(batch.imported_at.replace(' ', 'T') + 'Z').toLocaleString()}</time></div>)}</div> : <Empty title="No imports yet" text="Committed import files and their raw extraction payloads are listed here." />}</section>
+  </>;
+}
+
+function summarizeBatch(summary: string): string {
+  try { const counts = JSON.parse(summary) as Record<string, number>; return `${counts.create ?? 0} created, ${(counts.update ?? 0) + (counts.conflict ?? 0)} updated, ${counts.skip ?? 0} unchanged`; } catch { return ''; }
 }
 
 function Dashboard({ data, showCompanies, openCompany }: { data: DashboardData | null; showCompanies: () => void; openCompany: (id: number) => void }) {

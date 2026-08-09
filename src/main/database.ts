@@ -1,8 +1,10 @@
 import Database from 'better-sqlite3';
+import { commitImport, previewImport } from './importer';
+import { parseImportFile } from './import-schema';
 import { runMigrations } from './migrations';
 import { calculateVestingSummary } from './vesting';
 import { positiveId, validateCompensation, validateCompany, validateDocument, validateInstrumentType, validatePosition, validateVestingSchedule, ValidationError } from './validation';
-import type { Company, CompanyDetail, CompanyInput, Compensation, CompensationInput, DashboardData, Document, DocumentInput, InstrumentType, InstrumentTypeInput, Position, PositionInput, UpcomingVesting, VestingSchedule, VestingScheduleInput } from '../shared/types';
+import type { Company, CompanyDetail, CompanyInput, Compensation, CompensationInput, DashboardData, Document, DocumentInput, ImportBatch, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, UpcomingVesting, VestingSchedule, VestingScheduleInput } from '../shared/types';
 
 export class BoardTrackerDatabase {
   readonly db: Database.Database;
@@ -55,5 +57,9 @@ export class BoardTrackerDatabase {
     const missing_documents = this.db.prepare('SELECT documents.*, companies.name AS company_name, positions.status AS position_status, positions.position_type, compensation.type AS compensation_type, compensation.quantity AS compensation_quantity, instrument_types.name AS instrument_type_name FROM documents JOIN companies ON companies.id=documents.company_id LEFT JOIN positions ON positions.id=documents.position_id LEFT JOIN compensation ON compensation.id=documents.compensation_id LEFT JOIN instrument_types ON instrument_types.id=compensation.instrument_type_id WHERE documents.status=\'missing\' ORDER BY companies.name COLLATE NOCASE, documents.document_type COLLATE NOCASE, documents.id').all() as DashboardData['missing_documents'];
     return { counts, upcoming: this.db.prepare("SELECT p.*, c.name AS company_name FROM positions p JOIN companies c ON c.id=p.company_id WHERE p.status='potential' ORDER BY p.expected_decision_date IS NULL, p.expected_decision_date ASC, c.name COLLATE NOCASE").all() as DashboardData['upcoming'], upcoming_vesting, missing_documents };
   }
+  previewExtractedImport(contents: string, sourceLabel: string, selections: ImportSelections = {}): ImportPlan { return previewImport(this.db, parseImportFile(contents, sourceLabel), selections); }
+  commitExtractedImport(contents: string, sourceLabel: string, selections: ImportSelections = {}): ImportPlan { return commitImport(this.db, parseImportFile(contents, sourceLabel), selections); }
+  listImportBatches(): ImportBatch[] { return this.db.prepare('SELECT id,source_label,source_tool,source_reference,source_notes,schema_version,generated_at,summary_json,imported_at FROM import_batches ORDER BY imported_at DESC, id DESC LIMIT 100').all() as ImportBatch[]; }
+
   importSeedCompanies(seed: unknown): { inserted: number; skipped: number } { if (!Array.isArray(seed)) throw new ValidationError('Seed data must be an array.'); const insert = this.db.prepare('INSERT OR IGNORE INTO companies(name,business_summary,sector,website) VALUES (@name,@business_summary,@sector,@website)'); let inserted = 0; let skipped = 0; this.db.transaction(() => seed.forEach((item) => { const i = item as Record<string, unknown>; const data = validateCompany({ name: i.name as string, business_summary: i.business_summary as string | null, sector: i.sector as string | null, website: i.website as string | null }); const result = insert.run(data); if (result.changes) inserted++; else skipped++; }))(); return { inserted, skipped }; }
 }

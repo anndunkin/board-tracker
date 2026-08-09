@@ -1,0 +1,127 @@
+{
+  "schema": "board-tracker.import",
+  "schema_version": 1,
+  "generated_at": "2026-08-09",
+  "source": {
+    "tool": "Perplexity",
+    "reference": "https://www.perplexity.ai/search/example-extraction-session",
+    "notes": "Extracted from autobridge-advisor-agreement.pdf and bowtie-board-letter.pdf"
+  },
+  "companies": [
+    {
+      "name": "AutoBridge Systems",
+      "fields": {
+        "sector": "Automotive software",
+        "website": "autobridge.example",
+        "board_size": 6,
+        "meeting_cadence": "Quarterly"
+      },
+      "positions": [
+        {
+          "status": "current",
+          "position_type": "advisory_board",
+          "start_date": "2026-03-01",
+          "notes": "Two-year initial term, renewable by mutual agreement.",
+          "compensation": [
+            {
+              "type": "non_cash",
+              "instrument_type": "Options",
+              "quantity": 25000,
+              "grant_price": 1.25,
+              "grant_date": "2026-03-01",
+              "notes": "NSOs under the 2024 equity incentive plan.",
+              "extracted_data": {
+                "clause": "3(a)",
+                "confidence": "high",
+                "quoted_text": "an option to purchase 25,000 shares at an exercise price of $1.25 per share"
+              },
+              "vesting": {
+                "schedule_type": "cliff_linear",
+                "vesting_start": "2026-03-01",
+                "cliff_date": "2027-03-01",
+                "vesting_end": "2030-03-01",
+                "cadence": "monthly",
+                "notes": "25% cliff at twelve months, then monthly over the remaining term."
+              },
+              "documents": [
+                {
+                  "document_type": "grant_agreement",
+                  "status": "linked",
+                  "file_path": "C:\\Board Documents\\AutoBridge\\autobridge-option-grant.pdf",
+                  "document_date": "2026-03-01",
+                  "description": "Executed option grant agreement.",
+                  "extracted_data": { "pages": 6, "signed": true, "confidence": "high" }
+                },
+                {
+                  "document_type": "confirmation_of_shares",
+                  "status": "missing",
+                  "description": "Clause 3(c) refers to a share confirmation from the transfer agent; it was not provided.",
+                  "extracted_data": { "clause": "3(c)", "confidence": "high" }
+                }
+              ]
+            },
+            {
+              "type": "cash",
+              "amount": 2500,
+              "currency": "USD",
+              "frequency": "per_meeting",
+              "notes": "Paid within 30 days of each attended meeting.",
+              "extracted_data": { "clause": "4(b)", "confidence": "medium", "quoted_text": "$2,500 per meeting attended" }
+            }
+          ],
+          "documents": [
+            {
+              "document_type": "advisor_agreement",
+              "status": "linked",
+              "file_path": "C:\\Board Documents\\AutoBridge\\autobridge-advisor-agreement.pdf",
+              "file_name": "autobridge-advisor-agreement.pdf",
+              "document_date": "2026-03-01",
+              "description": "Signed advisory board agreement.",
+              "extracted_data": { "pages": 9, "signed": true, "confidence": "high" }
+            }
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "document_type": "nda",
+          "status": "linked",
+          "file_path": "C:\\Board Documents\\AutoBridge\\autobridge-mutual-nda.pdf",
+          "document_date": "2026-02-14",
+          "description": "Mutual NDA signed before the advisory discussions."
+        }
+      ]
+    },
+    {
+      "name": "Bowtie Security",
+      "fields": { "sector": "Cybersecurity" },
+      "positions": [
+        {
+          "status": "potential",
+          "position_type": "governing_board",
+          "expected_decision_date": "2026-10-15",
+          "notes": "Board seat under discussion; terms below are from the draft letter.",
+          "compensation": [
+            {
+              "type": "cash",
+              "amount": 40000,
+              "currency": "USD",
+              "frequency": "annual",
+              "notes": "Proposed annual cash retainer.",
+              "extracted_data": { "clause": "2", "confidence": "low", "quoted_text": "an annual retainer of $40,000" }
+            }
+          ],
+          "documents": [
+            {
+              "document_type": "offer_letter",
+              "status": "linked",
+              "file_path": "C:\\Board Documents\\Bowtie\\bowtie-board-letter.pdf",
+              "document_date": "2026-08-01",
+              "description": "Draft board invitation letter, unsigned."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

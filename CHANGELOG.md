@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0] — 2026-08-09
+
+### Added
+- "Import extracted data" screen that loads a structured JSON file produced in a Perplexity session from an uploaded agreement and maps it into company, position, compensation, vesting, document, and missing-document records. Board Tracker still makes no network calls of its own — it only reads the file you pick.
+- Review-before-commit workflow: every record in the file becomes a reviewable row marked New, Fill in, Conflict, Already there, or Blocked, with per-row checkboxes and the before and after values for each field. The preview runs the real import inside a transaction that is rolled back, so what you review is exactly what commits.
+- No-silent-overwrite matching. Records are matched by content rather than id (company by name, position by type/status/start date, compensation by its identifying amounts, documents by type and link). Anything that would replace an existing non-empty value is classed as a conflict and is off by default; deselecting a parent blocks its whole subtree, and ambiguous matches are blocked rather than guessed.
+- Idempotent imports: re-importing the same file reports everything as already there and changes no rows. An extracted file that supplies a path for an existing missing-document flag attaches to that same flag instead of creating a duplicate.
+- Audit trail. Every committed file is recorded as an import batch with its provenance, summary counts, and the complete raw payload, and each imported compensation and document record keeps its own `extracted_data` payload and a reference back to the batch.
+- Documented JSON import schema (`docs/import-schema.md`) with limits, matching rules, a suggested extraction prompt, and a worked example file (`docs/import-example.json`) that is verified by the test suite.
+- Versioned migration for the `import_batches` table and the `extracted_data_json` and `import_batch_id` columns on documents and compensation.
+- 47 new import tests covering end-to-end mapping, review-before-commit behavior, malformed and oversized input, and security (SQL injection, XSS, prototype pollution, caller-supplied ids, and partial-failure rollback).
+
 ## [0.3.0] — 2026-08-08
 
 ### Added

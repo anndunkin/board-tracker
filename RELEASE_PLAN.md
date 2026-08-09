@@ -91,7 +91,7 @@ tracking.
 - Broken-link detection (flag when a linked file no longer resolves).
 - `v0.3.0` release.
 
-### v0.4.0 — Perplexity-assisted document import
+### v0.4.0 — Perplexity-assisted document import (Delivered)
 - "Import Extracted Data" screen: load a structured JSON file (produced in a
   Perplexity session from an uploaded agreement) and map it into
   Compensation / Vesting / Documents / Missing Document Flags records, with
