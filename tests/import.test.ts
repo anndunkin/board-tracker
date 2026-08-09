@@ -7,6 +7,7 @@ import { companyInput, documentInput, importFile, nonCashInput, positionInput, t
 import type { BoardTrackerDatabase } from '../src/main/database';
 import type { ImportOperation, ImportPlan } from '../src/shared/types';
 import { EXTRACTION_PROMPT } from '../src/shared/extraction-prompt';
+import { companyResearchPrompt } from '../src/shared/research-prompt';
 import { IMPORT_SCHEMA_ID, IMPORT_SCHEMA_VERSION } from '../src/main/import-schema';
 import { importJsonSchemaText } from '../src/shared/import-json-schema';
 import { cadences, compensationTypes, documentStatuses, frequencies, positionStatuses, positionTypes, scheduleTypes } from '../src/shared/import-constants';
@@ -72,11 +73,34 @@ describe('import: end-to-end mapping of an extracted file', () => {
   });
 });
 
+/** The blockquote under one docs heading, unwrapped and reflowed onto a single line, so a prompt
+ * published in the docs can be compared character-for-character with the one the app ships. */
+const quotedUnder = (heading: string): string => {
+  const docs = fs.readFileSync(path.join(__dirname, '..', 'docs', 'import-schema.md'), 'utf8');
+  const section = docs.slice(docs.indexOf(heading) + heading.length).split('\n## ')[0];
+  const paragraphs: string[] = [];
+  let current: string[] = [];
+  for (const line of section.split('\n')) {
+    if (!line.startsWith('>')) { if (current.length) { paragraphs.push(current.join('\n')); current = []; } continue; }
+    const text = line.slice(1).trim();
+    if (!text) { if (current.length) { paragraphs.push(current.join('\n')); current = []; } continue; }
+    // A new bullet starts its own line; a continuation is folded into the bullet above it.
+    if (text.startsWith('- ') || !current.length) current.push(text);
+    else current[current.length - 1] = `${current[current.length - 1]} ${text}`;
+  }
+  if (current.length) paragraphs.push(current.join('\n'));
+  return paragraphs.join('\n\n');
+};
+
 describe('import: the extraction prompt', () => {
   it('is the same text the docs publish, so the button and the docs cannot drift apart', () => {
-    const docs = fs.readFileSync(path.join(__dirname, '..', 'docs', 'import-schema.md'), 'utf8');
-    const quoted = docs.split('\n').filter((line) => line.startsWith('> ')).map((line) => line.slice(2).trim()).join(' ');
-    expect(quoted).toBe(EXTRACTION_PROMPT);
+    expect(quotedUnder('## Prompt to use in a Perplexity session')).toBe(EXTRACTION_PROMPT);
+  });
+
+  it('publishes the research prompt too, with the company name and website left as placeholders', () => {
+    // The docs show the prompt with {name}/{website} standing in for the record's own values, so
+    // rendering the real function with those placeholders must reproduce the published text exactly.
+    expect(quotedUnder('## Prompt behind "Research this company"')).toBe(companyResearchPrompt('{name}', '{website}'));
   });
 
   it('names the schema and version the parser actually accepts', () => {
