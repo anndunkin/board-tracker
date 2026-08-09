@@ -75,3 +75,39 @@
 .research-saved{margin:12px 0 0;color:var(--muted);font-size:var(--text-xs);word-break:break-all}
 .field-hint{margin:-6px 0 2px;color:var(--muted);font-size:var(--text-xs);line-height:1.5}
 .derived-note{padding:0 16px 14px;color:var(--muted);font-size:var(--text-xs)}
+.nav-count{float:right;min-width:20px;padding:1px 6px;border-radius:999px;background:var(--danger);color:#fff;font-size:var(--text-xs);font-weight:700;text-align:center}
+.deadline-groups{display:grid;gap:8px;padding:8px 0 4px}
+.deadline-group{padding:14px 20px 4px;border-bottom:1px solid var(--border)}
+.deadline-group:last-child{border-bottom:0}
+.deadline-group>.section-heading{align-items:baseline;margin-bottom:10px}
+.deadline-blurb{color:var(--muted);font-size:var(--text-xs);text-align:right}
+.deadline-list{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.deadline-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:start;gap:14px;padding:12px 10px;border-radius:10px;border-left:3px solid transparent}
+.deadline-row:hover{background:var(--surface-alt)}
+.deadline-row.overdue{border-left-color:var(--danger)}
+.deadline-row.due_soon{border-left-color:var(--amber)}
+.deadline-row.upcoming{border-left-color:var(--border)}
+.deadline-row.done{border-left-color:var(--primary);opacity:.62}
+.deadline-check{width:20px;height:20px;margin-top:1px;display:grid;place-items:center;border:1.5px solid var(--border);border-radius:6px;background:var(--bg);color:var(--primary);font-size:var(--text-xs);font-weight:700}
+.deadline-check:hover{border-color:var(--primary)}
+.deadline-check.derived{border-style:none;background:transparent;color:var(--muted);cursor:default}
+.deadline-body{min-width:0;display:grid;gap:3px}
+.deadline-body strong{font-size:var(--text-sm);overflow-wrap:anywhere}
+.deadline-body small{overflow-wrap:anywhere}
+.deadline-row.done .deadline-body strong{text-decoration:line-through}
+.deadline-origin{color:var(--faint)}
+.deadline-notes{margin-top:3px;color:var(--muted);font-size:var(--text-xs);white-space:pre-wrap;overflow-wrap:anywhere}
+.deadline-when{display:grid;gap:2px;justify-items:end;text-align:right;white-space:nowrap}
+.deadline-when time{color:var(--text);font-weight:600;font-size:var(--text-xs)}
+.deadline-due{padding:2px 8px;border-radius:999px;font-size:var(--text-xs);font-weight:700;background:var(--surface-alt);color:var(--muted)}
+.deadline-due.overdue{background:var(--danger-soft);color:var(--danger)}
+.deadline-due.due_soon{background:var(--amber-soft);color:var(--amber)}
+.deadline-due.upcoming{background:var(--blue-soft);color:var(--blue)}
+.deadline-due.done{background:var(--primary-soft);color:var(--primary)}
+.deadline-actions{display:flex;align-items:center;gap:2px;white-space:nowrap}
+.deadline-actions .inline-link{margin:0 0 0 10px;justify-self:auto}
+.deadline-actions .inline-link.danger{color:var(--danger)}
+.toolbar .checkbox-label.inline{display:flex!important;gap:8px;font-size:var(--text-xs)!important;font-weight:700;color:var(--muted)!important}
+.upcoming-row.deadline-overdue time{color:var(--danger)}
+.upcoming-row.deadline-upcoming time{color:var(--blue)}
+@media(max-width:760px){.deadline-row{grid-template-columns:auto minmax(0,1fr);gap:8px 12px}.deadline-when,.deadline-actions{grid-column:2;justify-items:start;justify-content:flex-start;text-align:left}.deadline-when{flex-direction:row;grid-auto-flow:column;gap:8px;align-items:center}.deadline-actions .inline-link{margin:0 14px 0 0}.deadline-blurb{display:none}}

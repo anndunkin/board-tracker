@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.7.0] — 2026-08-09
+
+### Added
+- **Deadline tracking.** A new Deadlines page collects everything you owe someone a date on, grouped
+  into Overdue, Next 30 days, Later, and Completed, with the count of overdue items shown against
+  the nav item. Add your own — board meetings, filings, decisions, documents, reviews, payments —
+  optionally tied to a company and a position, and tick them off when they are done.
+- **Dates you already recorded now count as deadlines.** Expected decision dates on potential
+  positions, end dates on current terms, and vesting cliff and end dates appear in the same list
+  without being entered twice. They are marked with a ◆ and are read-only, because the real record
+  is the position or the vesting schedule; change it there. Past derived dates drop off on their
+  own, with one deliberate exception: a decision date that has passed on a position still marked
+  potential stays put, since that is exactly the thing worth chasing.
+- **A "What is due next" panel on the Overview**, showing the eight nearest deadlines.
+
+### Fixed
+- **Deleted companies no longer come back.** The bundled sample companies were re-imported on every
+  single launch. That import skips names it already finds, so a company you had deleted looked like
+  a missing row and was silently re-created the next time you opened the app. The import now runs
+  once and records that it has, so deleting is permanent. File › Import Seed Data, and the Import
+  seed data button, still re-add the samples deliberately, and now report how many were added
+  versus already present. Databases upgraded from an earlier version are treated as already seeded
+  if they contain any companies, so upgrading will not resurrect anything either.
+- **Dialog fields stop ignoring clicks on Windows, continued.** Moving dialogs out of the sticky-
+  sidebar grid in v0.6.2 reduced this but did not end it. The decisive observation came from the
+  debugging script: while a capture-phase pointer handler that performed a real hit test was
+  installed, every click landed, and the moment it was removed the fields went dead again. Chromium
+  was routing presses from hit-test data captured before the dialog opened. The app now performs
+  that hit test itself for as long as a dialog is open — once after the dialog paints, and again on
+  each press, so the data is rebuilt before the next press is routed.
+
 ## [0.6.2] — 2026-08-09
 
 ### Fixed

@@ -20,6 +20,22 @@ describe('dialogs hold the page still underneath them', () => {
     expect(locks).toHaveLength(backdrops.length);
   });
 
+  it('keeps hit-test data fresh for as long as a dialog is open', () => {
+    const app = read('App.tsx');
+    // Windows kept routing clicks from data captured before the dialog opened, so a visible field
+    // would not take focus. A capture-phase pointer handler that performs a real hit test is what
+    // was observed to end it, so the app installs one itself while a dialog is open.
+    expect(app).toMatch(/function useDialogHitTestRefresh\(/);
+    expect(app).toMatch(/document\.elementFromPoint\(x, y\)/);
+    expect(app).toMatch(/document\.addEventListener\('pointerdown', onPointerDown, true\)/);
+    expect(app).toMatch(/document\.removeEventListener\('pointerdown', onPointerDown, true\)/);
+    expect(app).toMatch(/requestAnimationFrame/);
+    // Every dialog gets it, on the same footing as the scroll lock.
+    const backdrops = app.split('\n').filter((line) => line.includes('className="modal-backdrop"'));
+    const refreshes = app.split('\n').filter((line) => line.trim() === 'useDialogHitTestRefresh();');
+    expect(refreshes).toHaveLength(backdrops.length);
+  });
+
   it('restores the original overflow rather than assuming it was unset', () => {
     const app = read('App.tsx');
     // Captured off body.style before anything is written, and written back verbatim on close.

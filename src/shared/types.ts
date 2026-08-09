@@ -5,6 +5,10 @@ export type CompensationFrequency = 'one_time' | 'annual' | 'quarterly' | 'month
 export type VestingScheduleType = 'immediate' | 'cliff_linear' | 'milestone' | 'custom';
 export type VestingCadence = 'monthly' | 'quarterly' | 'annual' | 'one_time';
 export type DocumentStatus = 'linked' | 'missing';
+export type DeadlineType = 'board_meeting' | 'decision' | 'filing' | 'document' | 'review' | 'payment' | 'other';
+/** Where a dated obligation came from: one you entered, or one already implied by the record. */
+export type DeadlineSource = 'tracked' | 'decision' | 'term_end' | 'vesting_cliff' | 'vesting_end';
+export type DeadlineUrgency = 'overdue' | 'due_soon' | 'upcoming';
 
 export interface CompanyInput { name: string; business_summary?: string | null; sector?: string | null; website?: string | null; board_size?: number | null; other_board_members?: string | null; meeting_cadence?: string | null; notes?: string | null; }
 export interface Company extends Required<Omit<CompanyInput, 'board_size'>> { id: number; board_size: number | null; created_at: string; updated_at: string; position_count?: number; }
@@ -29,7 +33,17 @@ export interface CompanyAlias { id: number; company_id: number; name: string; so
 export interface CompanyDetail extends Company { positions: Array<Position & { compensation: Compensation[] }>; documents: Document[]; aliases: CompanyAlias[]; }
 export interface UpcomingVesting extends VestingSchedule { company_id: number; company_name: string; position_id: number; quantity: number | null; instrument_type_name: string | null; vesting_summary: VestingSummary; }
 export interface MissingDocument extends Document { company_name: string; }
-export interface DashboardData { counts: Record<PositionStatus, number>; upcoming: Array<Position & { company_name: string }>; upcoming_vesting: UpcomingVesting[]; missing_documents: MissingDocument[]; }
+
+export interface DeadlineInput { company_id?: number | null; position_id?: number | null; title: string; deadline_type: DeadlineType; due_date: string; notes?: string | null; }
+export interface Deadline extends Omit<DeadlineInput, 'company_id' | 'position_id' | 'notes'> { id: number; company_id: number | null; position_id: number | null; notes: string | null; completed_at: string | null; created_at: string; updated_at: string; }
+/**
+ * One dated obligation, whether you entered it or the record already implied it. Derived entries
+ * have no id and cannot be edited or completed — you change the underlying position or schedule.
+ */
+export interface DeadlineItem { key: string; source: DeadlineSource; id: number | null; title: string; detail: string | null; due_date: string; company_id: number | null; company_name: string | null; position_id: number | null; deadline_type: DeadlineType | null; notes: string | null; completed_at: string | null; days_until: number; urgency: DeadlineUrgency; }
+export interface DeadlineFilter { include_completed?: boolean; company_id?: number | null; }
+
+export interface DashboardData { counts: Record<PositionStatus, number>; upcoming: Array<Position & { company_name: string }>; upcoming_vesting: UpcomingVesting[]; missing_documents: MissingDocument[]; deadlines: DeadlineItem[]; }
 export interface DocumentOpenResult { ok: boolean; error?: string; }
 
 export type ImportOperationKind = 'company' | 'company_fields' | 'position' | 'compensation' | 'vesting' | 'document' | 'instrument_type';
@@ -58,6 +72,7 @@ export interface BoardTrackerApi {
   instrumentTypes: { list: () => Promise<InstrumentType[]>; create: (input: InstrumentTypeInput) => Promise<InstrumentType>; update: (id: number, input: InstrumentTypeInput) => Promise<InstrumentType>; delete: (id: number) => Promise<void>; };
   vestingSchedules: { create: (input: VestingScheduleInput) => Promise<VestingSchedule>; update: (id: number, input: VestingScheduleInput) => Promise<VestingSchedule>; delete: (id: number) => Promise<void>; };
   documents: { create: (input: DocumentInput) => Promise<Document>; update: (id: number, input: DocumentInput) => Promise<Document>; delete: (id: number) => Promise<void>; pickFile: () => Promise<string | null>; open: (filePath: string) => Promise<DocumentOpenResult>; };
-  importSeedData: () => Promise<{ inserted: number; skipped: number }>;
+  deadlines: { list: (filter?: DeadlineFilter) => Promise<DeadlineItem[]>; create: (input: DeadlineInput) => Promise<Deadline>; update: (id: number, input: DeadlineInput) => Promise<Deadline>; delete: (id: number) => Promise<void>; setCompleted: (id: number, completed: boolean) => Promise<Deadline>; };
+  importSeedData: () => Promise<{ inserted: number; skipped: number; already_imported: boolean }>;
   extractedImport: { pickFile: () => Promise<ImportFileResult | null>; preview: (contents: string, sourceLabel: string, selections?: ImportSelections) => Promise<ImportPlan>; commit: (contents: string, sourceLabel: string, selections?: ImportSelections) => Promise<ImportPlan>; batches: () => Promise<ImportBatch[]>; copyPrompt: () => Promise<string>; saveSchema: () => Promise<string | null>; };
 }

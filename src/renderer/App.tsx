@@ -1,10 +1,14 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { companyResearchPrompt } from '../shared/research-prompt';
-import type { Company, CompanyAlias, CompanyDetail, CompanyInput, Compensation, CompensationFrequency, CompensationInput, CompensationType, DashboardData, Document, DocumentInput, ImportBatch, ImportFileResult, ImportNotice, ImportOperation, ImportOperationAction, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, PositionStatus, PositionType, VestingCadence, VestingSchedule, VestingScheduleInput, VestingScheduleType } from '../shared/types';
+import { dueLabel } from '../shared/deadlines';
+import type { Company, CompanyAlias, CompanyDetail, CompanyInput, Compensation, CompensationFrequency, CompensationInput, CompensationType, DashboardData, Deadline, DeadlineInput, DeadlineItem, DeadlineType, Document, DocumentInput, ImportBatch, ImportFileResult, ImportNotice, ImportOperation, ImportOperationAction, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, PositionStatus, PositionType, VestingCadence, VestingSchedule, VestingScheduleInput, VestingScheduleType } from '../shared/types';
 
-type Modal = null | { kind: 'company'; item?: Company } | { kind: 'position'; item?: Position } | { kind: 'compensation'; positionId: number; item?: Compensation } | { kind: 'instrument-type'; item?: InstrumentType } | { kind: 'document'; item?: Document; focusFile?: boolean } | { kind: 'research'; item: CompanyDetail };
+type Modal = null | { kind: 'deadline'; item?: DeadlineItem } | { kind: 'company'; item?: Company } | { kind: 'position'; item?: Position } | { kind: 'compensation'; positionId: number; item?: Compensation } | { kind: 'instrument-type'; item?: InstrumentType } | { kind: 'document'; item?: Document; focusFile?: boolean } | { kind: 'research'; item: CompanyDetail };
 const documentTypes = ['board_agreement', 'offer_letter', 'grant_agreement', 'nda', 'confirmation_of_shares'];
+const deadlineTypes: DeadlineType[] = ['board_meeting', 'decision', 'filing', 'document', 'review', 'payment', 'other'];
+/** Where a derived deadline came from, said plainly, so nobody wonders why they cannot edit it. */
+const deadlineOrigin: Record<Exclude<DeadlineItem['source'], 'tracked'>, string> = { decision: 'From the position’s expected decision date', term_end: 'From the position’s end date', vesting_cliff: 'From the vesting schedule', vesting_end: 'From the vesting schedule' };
 const label = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const date = (value: string | null | undefined) => value ? new Date(`${value}T00:00:00`).toLocaleDateString() : '—';
 const money = (amount: number, currency: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount);
@@ -13,8 +17,10 @@ const fileNameFromPath = (value: string) => value.split(/[\\/]/).pop() || value;
 const documentContext = (item: Document) => [item.position_type ? label(item.position_type) : null, item.compensation_type ? `${item.compensation_type === 'non_cash' ? `${quantity(item.compensation_quantity ?? null)} ${item.instrument_type_name || 'instrument'}` : 'Cash'} compensation` : null].filter(Boolean).join(' · ') || 'Company-level document';
 
 function App() {
-  const [view, setView] = useState<'dashboard' | 'companies' | 'instrument-types' | 'import'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'companies' | 'deadlines' | 'instrument-types' | 'import'>('dashboard');
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [deadlines, setDeadlines] = useState<DeadlineItem[]>([]);
+  const [showCompletedDeadlines, setShowCompletedDeadlines] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [instrumentTypes, setInstrumentTypes] = useState<InstrumentType[]>([]);
   const [detail, setDetail] = useState<CompanyDetail | null>(null);
@@ -26,24 +32,37 @@ function App() {
   const refreshDashboard = () => window.boardTracker.dashboard().then(setDashboard);
   const refreshCompanies = () => window.boardTracker.companies.list(search).then(setCompanies);
   const refreshInstrumentTypes = () => window.boardTracker.instrumentTypes.list().then(setInstrumentTypes);
+  const refreshDeadlines = () => window.boardTracker.deadlines.list({ include_completed: showCompletedDeadlines }).then(setDeadlines);
   const refreshDetail = (id: number) => window.boardTracker.companies.get(id).then(setDetail);
 
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => { refreshDashboard(); refreshInstrumentTypes(); }, []);
+  useEffect(() => { refreshDeadlines(); }, [showCompletedDeadlines]);
   useEffect(() => { const timer = window.setTimeout(refreshCompanies, 120); return () => window.clearTimeout(timer); }, [search]);
   useTrackBackgroundScroll();
   useEffect(() => {
-    const seeded = () => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); if (detail) refreshDetail(detail.id); setMessage('Seed data import completed.'); };
-    const changed = () => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); if (detail) refreshDetail(detail.id); };
+    const seeded = () => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); refreshDeadlines(); if (detail) refreshDetail(detail.id); setMessage('Seed data import completed.'); };
+    const changed = () => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); refreshDeadlines(); if (detail) refreshDetail(detail.id); };
     window.addEventListener('seed-imported', seeded); window.addEventListener('records-changed', changed);
     return () => { window.removeEventListener('seed-imported', seeded); window.removeEventListener('records-changed', changed); };
   }, [detail]);
 
   const openCompany = (id: number) => { refreshDetail(id); setView('companies'); };
   const openInstrumentTypes = () => { setDetail(null); setView('instrument-types'); };
-  const mutate = async (work: () => Promise<unknown>, success: string) => { try { await work(); setModal(null); setMessage(success); refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); if (detail) refreshDetail(detail.id); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } };
-  const importSeed = () => mutate(() => window.boardTracker.importSeedData(), 'Seed data imported (existing company names were skipped).');
+  const mutate = async (work: () => Promise<unknown>, success: string) => { try { await work(); setModal(null); setMessage(success); refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); refreshDeadlines(); if (detail) refreshDetail(detail.id); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } };
+  const importSeed = async () => {
+    try {
+      const result = await window.boardTracker.importSeedData();
+      refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); refreshDeadlines(); if (detail) refreshDetail(detail.id);
+      setMessage(result.inserted === 0 && result.skipped > 0
+        ? `Seed data already present — all ${result.skipped} companies were left alone.`
+        : `Seed data imported: ${result.inserted} added, ${result.skipped} already there.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+  };
   const openDocument = async (item: Document) => { if (!item.file_path) { setOpenFailure(item); return; } try { const result = await window.boardTracker.documents.open(item.file_path); if (!result.ok) { setMessage(`${item.file_name || item.document_type} could not be opened. It may have moved.`); setOpenFailure(item); } } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); setOpenFailure(item); } };
+  const overdueCount = deadlines.filter((item) => item.urgency === 'overdue').length;
+  const toggleDeadline = (item: DeadlineItem) => { if (item.id != null) void mutate(() => window.boardTracker.deadlines.setCompleted(item.id!, !item.completed_at), item.completed_at ? 'Deadline reopened.' : 'Deadline marked done.'); };
+  const removeDeadline = (item: DeadlineItem) => { if (item.id != null && window.confirm(`Delete the deadline “${item.title}”?`)) void mutate(() => window.boardTracker.deadlines.delete(item.id!), 'Deadline deleted.'); };
   const markMissing = (item: Document) => { void mutate(() => window.boardTracker.documents.update(item.id, { company_id: item.company_id, position_id: item.position_id, compensation_id: item.compensation_id, document_type: item.document_type, file_path: null, file_name: null, description: item.description, document_date: item.document_date, status: 'missing' }), 'Document marked missing.').then(() => setOpenFailure(null)); };
 
   return <div className="app-shell">
@@ -52,6 +71,7 @@ function App() {
       <nav>
         <button className={view === 'dashboard' ? 'nav active' : 'nav'} onClick={() => { setDetail(null); setView('dashboard'); }}>Overview</button>
         <button className={view === 'companies' ? 'nav active' : 'nav'} onClick={() => { setDetail(null); setView('companies'); }}>Companies</button>
+        <button className={view === 'deadlines' ? 'nav active' : 'nav'} onClick={() => { setDetail(null); setView('deadlines'); }}>Deadlines{overdueCount > 0 && <span className="nav-count" aria-label={`${overdueCount} overdue`}>{overdueCount}</span>}</button>
         <button className={view === 'instrument-types' ? 'nav active' : 'nav'} onClick={openInstrumentTypes}>Instrument types</button>
         <button className={view === 'import' ? 'nav active' : 'nav'} onClick={() => { setDetail(null); setView('import'); }}>Import extracted data</button>
       </nav>
@@ -60,11 +80,11 @@ function App() {
     <main className="main">
       {message && <div className="toast" role="status">{message}<button onClick={() => setMessage('')} aria-label="Dismiss">×</button></div>}
       {openFailure && <div className="toast document-open-error" role="alert"><span><strong>{openFailure.file_name || label(openFailure.document_type)}</strong> may have moved. Re-link it or keep it as a missing-document reminder.</span><div><button className="toast-action" onClick={() => { setModal({ kind: 'document', item: openFailure, focusFile: true }); setOpenFailure(null); }}>Re-link</button><button className="toast-action" onClick={() => markMissing(openFailure)}>Mark missing</button><button onClick={() => setOpenFailure(null)} aria-label="Dismiss">×</button></div></div>}
-      {detail ? <CompanyDetailPage detail={detail} back={() => setDetail(null)} openModal={setModal} openDocument={openDocument} onDelete={() => { if (window.confirm(`Delete ${detail.name}? Its ${detail.positions.length} position(s), compensation, vesting schedules, and ${detail.documents.length} document link(s) will be deleted. The original files will not be deleted.`)) void mutate(() => window.boardTracker.companies.delete(detail.id), 'Company and related records deleted.').then(() => setDetail(null)); }} /> : view === 'dashboard' ? <Dashboard data={dashboard} showCompanies={() => setView('companies')} openCompany={openCompany} /> : view === 'companies' ? <Companies companies={companies} search={search} setSearch={setSearch} openCompany={openCompany} add={() => setModal({ kind: 'company' })} /> : view === 'import' ? <ImportExtractedData notify={setMessage} onImported={() => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); }} /> : <InstrumentTypes types={instrumentTypes} add={() => setModal({ kind: 'instrument-type' })} edit={(item) => setModal({ kind: 'instrument-type', item })} remove={(item) => { if (window.confirm(`Delete ${item.name}? This type cannot be deleted if it is in use by a non-cash compensation record.`)) void mutate(() => window.boardTracker.instrumentTypes.delete(item.id), 'Instrument type deleted.'); }} />}
+      {detail ? <CompanyDetailPage detail={detail} back={() => setDetail(null)} openModal={setModal} openDocument={openDocument} onDelete={() => { if (window.confirm(`Delete ${detail.name}? Its ${detail.positions.length} position(s), compensation, vesting schedules, and ${detail.documents.length} document link(s) will be deleted. The original files will not be deleted.`)) void mutate(() => window.boardTracker.companies.delete(detail.id), 'Company and related records deleted.').then(() => setDetail(null)); }} /> : view === 'dashboard' ? <Dashboard data={dashboard} showCompanies={() => setView('companies')} showDeadlines={() => setView('deadlines')} openCompany={openCompany} /> : view === 'companies' ? <Companies companies={companies} search={search} setSearch={setSearch} openCompany={openCompany} add={() => setModal({ kind: 'company' })} /> : view === 'deadlines' ? <Deadlines items={deadlines} showCompleted={showCompletedDeadlines} setShowCompleted={setShowCompletedDeadlines} add={() => setModal({ kind: 'deadline' })} edit={(item) => setModal({ kind: 'deadline', item })} toggle={toggleDeadline} remove={removeDeadline} openCompany={openCompany} /> : view === 'import' ? <ImportExtractedData notify={setMessage} onImported={() => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); }} /> : <InstrumentTypes types={instrumentTypes} add={() => setModal({ kind: 'instrument-type' })} edit={(item) => setModal({ kind: 'instrument-type', item })} remove={(item) => { if (window.confirm(`Delete ${item.name}? This type cannot be deleted if it is in use by a non-cash compensation record.`)) void mutate(() => window.boardTracker.instrumentTypes.delete(item.id), 'Instrument type deleted.'); }} />}
     </main>
     <DialogLayer>
       {modal?.kind === 'research' && <ResearchModal detail={modal.item} close={() => setModal(null)} />}
-      {modal && modal.kind !== 'research' && <ModalForm modal={modal} detail={detail} instrumentTypes={instrumentTypes} close={() => setModal(null)} openInstrumentTypes={openInstrumentTypes} submit={mutate} />}
+      {modal && modal.kind !== 'research' && <ModalForm modal={modal} detail={detail} companies={companies} instrumentTypes={instrumentTypes} close={() => setModal(null)} openInstrumentTypes={openInstrumentTypes} submit={mutate} />}
     </DialogLayer>
   </div>;
 }
@@ -212,13 +232,61 @@ function summarizeBatch(summary: string): string {
   try { const counts = JSON.parse(summary) as Record<string, number>; return `${counts.create ?? 0} created, ${(counts.update ?? 0) + (counts.conflict ?? 0)} updated, ${counts.skip ?? 0} unchanged`; } catch { return ''; }
 }
 
-function Dashboard({ data, showCompanies, openCompany }: { data: DashboardData | null; showCompanies: () => void; openCompany: (id: number) => void }) {
+function Dashboard({ data, showCompanies, showDeadlines, openCompany }: { data: DashboardData | null; showCompanies: () => void; showDeadlines: () => void; openCompany: (id: number) => void }) {
   return <>
     <header className="page-header"><div><p className="eyebrow">Board position portfolio</p><h1>Overview</h1></div><button className="button secondary" onClick={showCompanies}>Manage companies</button></header>
     <section className="metric-grid">{(['current', 'former', 'potential'] as PositionStatus[]).map((status) => <article className={`metric ${status}`} key={status}><span>{label(status)} positions</span><strong>{data?.counts[status] ?? 0}</strong></article>)}</section>
+    <section className="content-card dashboard-card"><div className="section-heading"><div><p className="eyebrow">Commitments</p><h2>What is due next</h2></div>{data?.deadlines.length ? <button className="button secondary" onClick={showDeadlines}>All deadlines</button> : null}</div>{data?.deadlines.length ? <div className="upcoming-list">{data.deadlines.map((item) => <button key={item.key} className={`upcoming-row deadline-${item.urgency}`} onClick={() => item.company_id == null ? showDeadlines() : openCompany(item.company_id)}><span><strong>{item.title}</strong><small>{[item.company_name, item.detail ? label(item.detail) : null].filter(Boolean).join(' · ') || 'No company'}</small></span><time>{dueLabel(item.days_until, false)}</time></button>)}</div> : <Empty title="Nothing due" text="Deadlines you add, and dates already on your positions and vesting schedules, appear here." />}</section>
     <section className="content-card dashboard-card"><div className="section-heading"><div><p className="eyebrow">Pipeline</p><h2>Upcoming decisions</h2></div></div>{data?.upcoming.length ? <div className="upcoming-list">{data.upcoming.map((position) => <button key={position.id} className="upcoming-row" onClick={() => openCompany(position.company_id)}><span><strong>{position.company_name}</strong><small>{label(position.position_type)}</small></span><time>{date(position.expected_decision_date)}</time></button>)}</div> : <Empty title="No upcoming decisions" text="Potential positions with a decision date will appear here." />}</section>
     <section className="content-card dashboard-card"><div className="section-heading"><div><p className="eyebrow">Equity</p><h2>Upcoming vesting</h2></div></div>{data?.upcoming_vesting.length ? <> <div className="upcoming-list">{data.upcoming_vesting.map((schedule) => <button key={schedule.id} className="upcoming-row" onClick={() => openCompany(schedule.company_id)}><span><strong>{schedule.company_name}</strong><small>{quantity(schedule.quantity)} {schedule.instrument_type_name || 'instrument'} · {schedule.vesting_summary.text}</small></span><time>Ends {date(schedule.effective_vesting_end ?? schedule.vesting_end)}{schedule.vesting_end_is_derived ? '*' : ''}</time></button>)}</div>{data.upcoming_vesting.some((schedule) => schedule.vesting_end_is_derived) && <p className="derived-note">* End date worked out from the vesting term, not stated in the agreement.</p>} </> : <Empty title="No active vesting" text="Cliff and linear awards that are currently vesting will appear here." />}</section>
     <section className="content-card dashboard-card"><div className="section-heading"><div><p className="eyebrow">Paperwork</p><h2>Missing documents</h2></div></div>{data?.missing_documents.length ? <div className="upcoming-list">{data.missing_documents.map((item) => <button key={item.id} className="upcoming-row" onClick={() => openCompany(item.company_id)}><span><strong>{item.company_name}</strong><small>{label(item.document_type)} · {documentContext(item)}</small></span><time>Missing</time></button>)}</div> : <Empty title="No missing documents" text="Expected documents you have not received will appear here." />}</section>
+  </>;
+}
+
+/** One row in the deadline list. Derived rows have no id, so they offer no Done or Delete. */
+function DeadlineRowView({ item, edit, toggle, remove, openCompany }: { item: DeadlineItem; edit: (item: DeadlineItem) => void; toggle: (item: DeadlineItem) => void; remove: (item: DeadlineItem) => void; openCompany: (id: number) => void }) {
+  const tracked = item.id != null;
+  const done = Boolean(item.completed_at);
+  const context = [item.company_name, item.detail ? label(item.detail) : null, item.deadline_type && item.source === 'tracked' ? label(item.deadline_type) : null].filter(Boolean).join(' · ');
+  return <li className={`deadline-row ${done ? 'done' : item.urgency}`}>
+    {tracked
+      ? <button type="button" className="deadline-check" onClick={() => toggle(item)} aria-pressed={done} aria-label={done ? `Reopen ${item.title}` : `Mark ${item.title} done`}>{done ? '✓' : ''}</button>
+      : <span className="deadline-check derived" aria-hidden="true">◆</span>}
+    <div className="deadline-body">
+      <strong>{item.title}</strong>
+      <small>{context || 'No company'}{!tracked && <span className="deadline-origin"> · {deadlineOrigin[item.source as Exclude<DeadlineItem['source'], 'tracked'>]}</span>}</small>
+      {item.notes && <p className="deadline-notes">{item.notes}</p>}
+    </div>
+    <div className="deadline-when"><time dateTime={item.due_date}>{date(item.due_date)}</time><span className={`deadline-due ${done ? 'done' : item.urgency}`}>{dueLabel(item.days_until, done)}</span></div>
+    <div className="deadline-actions">
+      {item.company_id != null && <button type="button" className="inline-link" onClick={() => openCompany(item.company_id!)}>Open</button>}
+      {tracked && <><button type="button" className="inline-link" onClick={() => edit(item)}>Edit</button><button type="button" className="inline-link danger" onClick={() => remove(item)}>Delete</button></>}
+    </div>
+  </li>;
+}
+
+function Deadlines({ items, showCompleted, setShowCompleted, add, edit, toggle, remove, openCompany }: { items: DeadlineItem[]; showCompleted: boolean; setShowCompleted: (value: boolean) => void; add: () => void; edit: (item: DeadlineItem) => void; toggle: (item: DeadlineItem) => void; remove: (item: DeadlineItem) => void; openCompany: (id: number) => void }) {
+  const groups: Array<{ key: string; heading: string; blurb: string; rows: DeadlineItem[] }> = [
+    { key: 'overdue', heading: 'Overdue', blurb: 'Past their date and not yet marked done.', rows: items.filter((item) => !item.completed_at && item.urgency === 'overdue') },
+    { key: 'due_soon', heading: 'Next 30 days', blurb: 'Coming up shortly.', rows: items.filter((item) => !item.completed_at && item.urgency === 'due_soon') },
+    { key: 'upcoming', heading: 'Later', blurb: 'Further out, in date order.', rows: items.filter((item) => !item.completed_at && item.urgency === 'upcoming') },
+    { key: 'done', heading: 'Completed', blurb: 'Marked done. Reopen one by clicking its tick.', rows: items.filter((item) => item.completed_at) },
+  ].filter((group) => group.rows.length > 0);
+  return <>
+    <header className="page-header"><div><p className="eyebrow">Commitments</p><h1>Deadlines</h1></div><button className="button" onClick={add}>Add deadline</button></header>
+    <section className="content-card table-card">
+      <div className="toolbar">
+        <label className="checkbox-label inline"><input type="checkbox" checked={showCompleted} onChange={(event) => setShowCompleted(event.target.checked)} />Show completed</label>
+        <span>{items.filter((item) => !item.completed_at).length} outstanding</span>
+      </div>
+      {groups.length
+        ? <div className="deadline-groups">{groups.map((group) => <section key={group.key} className="deadline-group">
+            <div className="section-heading"><div><p className="eyebrow">{group.heading}</p><h2>{group.rows.length} {group.rows.length === 1 ? 'item' : 'items'}</h2></div><p className="deadline-blurb">{group.blurb}</p></div>
+            <ul className="deadline-list">{group.rows.map((item) => <DeadlineRowView key={item.key} item={item} edit={edit} toggle={toggle} remove={remove} openCompany={openCompany} />)}</ul>
+          </section>)}</div>
+        : <Empty title="Nothing due" text="Add a deadline, or give a potential position a decision date and it will show up here on its own." />}
+    </section>
+    <p className="derived-note">◆ marks a date the app worked out from a position or a vesting schedule. Change those on the record they come from.</p>
   </>;
 }
 
@@ -269,6 +337,7 @@ function ResearchModal({ detail, close }: { detail: CompanyDetail; close: () => 
   const copy = async () => { await window.boardTracker.companies.copyResearchPrompt(detail.name, detail.website); setCopied(true); setTimeout(() => setCopied(false), 2500); };
   const saveSchema = async () => { const path = await window.boardTracker.extractedImport.saveSchema(); if (path) setSaved(path); };
   useBackgroundScrollLock();
+  useDialogHitTestRefresh();
   return <div className="modal-backdrop" role="presentation"><section className="modal research-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div className="modal-header"><h2 id="modal-title">Research {detail.name}</h2><button onClick={close} aria-label="Close dialog">×</button></div>
     <div>
@@ -329,6 +398,34 @@ function useTrackBackgroundScroll() {
   }, []);
 }
 
+/**
+ * Chromium on Windows keeps serving clicks from hit-test data captured before the dialog opened, so
+ * a field that is plainly visible refuses to take focus. Rendering dialogs outside the sticky-
+ * sidebar grid (v0.6.2) reduced it but did not end it.
+ *
+ * What demonstrably ends it is a capture-phase pointer handler that performs a real hit test: while
+ * the debugging script that did exactly that was installed, every click landed. So the app now does
+ * it for itself, for as long as a dialog is open. Each press re-tests the point under the cursor,
+ * which rebuilds the stale data before the next press is routed, and the dialog also re-tests once
+ * it has painted so the first click is already working from fresh data.
+ */
+function useDialogHitTestRefresh() {
+  useEffect(() => {
+    const retest = (x: number, y: number) => { void document.elementFromPoint(x, y); };
+    const retestCentre = () => retest(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2));
+    // Two frames: the first after the dialog paints, the second after the compositor has committed.
+    const frame = window.requestAnimationFrame(() => { retestCentre(); window.requestAnimationFrame(retestCentre); });
+    const onPointerDown = (event: PointerEvent) => retest(event.clientX, event.clientY);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('resize', retestCentre);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('resize', retestCentre);
+    };
+  }, []);
+}
+
 function useBackgroundScrollLock() {
   useEffect(() => {
     const { body, documentElement } = document;
@@ -377,13 +474,25 @@ function CompensationRow({ compensation, edit, remove }: { compensation: Compens
   return <div className="comp-row"><span><strong>{nonCash ? `${quantity(compensation.quantity)} ${compensation.instrument_type_name || 'instrument units'}` : money(compensation.amount ?? 0, compensation.currency || 'USD')}</strong><small>{nonCash ? `${compensation.grant_price == null ? 'No grant price' : `${money(compensation.grant_price, 'USD')} per unit`}${compensation.grant_date ? ` · Granted ${date(compensation.grant_date)}` : ''}` : label(compensation.frequency || 'one_time')}{compensation.notes ? ` · ${compensation.notes}` : ''}</small>{nonCash && <small className="vesting-line">Vesting: {compensation.vesting_summary?.text || 'No vesting schedule'}{vestingEndNote(compensation.active_vesting_schedule)}</small>}</span><div className="compact-actions"><button onClick={edit}>Edit</button><button className="text-danger" onClick={remove}>Delete</button></div></div>;
 }
 
-function ModalForm({ modal, detail, instrumentTypes, close, openInstrumentTypes, submit }: { modal: Exclude<Modal, null>; detail: CompanyDetail | null; instrumentTypes: InstrumentType[]; close: () => void; openInstrumentTypes: () => void; submit: (work: () => Promise<unknown>, success: string) => Promise<void> }) {
+function ModalForm({ modal, detail, companies, instrumentTypes, close, openInstrumentTypes, submit }: { modal: Exclude<Modal, null>; detail: CompanyDetail | null; companies: Company[]; instrumentTypes: InstrumentType[]; close: () => void; openInstrumentTypes: () => void; submit: (work: () => Promise<unknown>, success: string) => Promise<void> }) {
   const company = modal.kind === 'company' ? modal.item : undefined;
   const position = modal.kind === 'position' ? modal.item : undefined;
   const compensation = modal.kind === 'compensation' ? modal.item : undefined;
   const instrumentType = modal.kind === 'instrument-type' ? modal.item : undefined;
   const documentItem = modal.kind === 'document' ? modal.item : undefined;
+  const deadline = modal.kind === 'deadline' ? modal.item : undefined;
   const schedule = compensation?.active_vesting_schedule;
+  const [deadlineType, setDeadlineType] = useState<DeadlineType>(deadline?.deadline_type ?? 'board_meeting');
+  const [deadlineCompanyId, setDeadlineCompanyId] = useState(deadline?.company_id != null ? String(deadline.company_id) : detail ? String(detail.id) : '');
+  const [deadlinePositions, setDeadlinePositions] = useState<Position[]>([]);
+  const [deadlinePositionId, setDeadlinePositionId] = useState(deadline?.position_id != null ? String(deadline.position_id) : '');
+  useEffect(() => {
+    if (modal.kind !== 'deadline') return;
+    if (!deadlineCompanyId) { setDeadlinePositions([]); setDeadlinePositionId(''); return; }
+    let live = true;
+    void window.boardTracker.companies.get(Number(deadlineCompanyId)).then((loaded) => { if (!live || !loaded) return; setDeadlinePositions(loaded.positions); setDeadlinePositionId((current) => loaded.positions.some((item) => String(item.id) === current) ? current : ''); });
+    return () => { live = false; };
+  }, [deadlineCompanyId]);
   const [status, setStatus] = useState<PositionStatus>(position?.status ?? 'current');
   const [compensationType, setCompensationType] = useState<CompensationType>(compensation?.type ?? 'cash');
   const [hasVesting, setHasVesting] = useState(Boolean(schedule));
@@ -399,11 +508,14 @@ function ModalForm({ modal, detail, instrumentTypes, close, openInstrumentTypes,
   const [error, setError] = useState('');
   const pickFile = async () => { try { const picked = await window.boardTracker.documents.pickFile(); if (picked) { setFilePath(picked); if (!fileName) setFileName(fileNameFromPath(picked)); setMissing(false); } } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); } };
   useEffect(() => { if (modal.kind === 'document' && modal.focusFile) void pickFile(); }, []);
-  const heading = modal.kind === 'company' ? `${company ? 'Edit' : 'Add'} company` : modal.kind === 'position' ? `${position ? 'Edit' : 'Add'} position` : modal.kind === 'instrument-type' ? `${instrumentType ? 'Edit' : 'Add'} instrument type` : modal.kind === 'document' ? `${documentItem ? 'Edit' : 'Link'} document` : `${compensation ? 'Edit' : 'Add'} compensation`;
+  const heading = modal.kind === 'deadline' ? `${deadline ? 'Edit' : 'Add'} deadline` : modal.kind === 'company' ? `${company ? 'Edit' : 'Add'} company` : modal.kind === 'position' ? `${position ? 'Edit' : 'Add'} position` : modal.kind === 'instrument-type' ? `${instrumentType ? 'Edit' : 'Add'} instrument type` : modal.kind === 'document' ? `${documentItem ? 'Edit' : 'Link'} document` : `${compensation ? 'Edit' : 'Add'} compensation`;
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setError(''); const form = new FormData(event.currentTarget);
     try {
-      if (modal.kind === 'company') {
+      if (modal.kind === 'deadline') {
+        const input: DeadlineInput = { title: String(form.get('title') || ''), deadline_type: deadlineType, due_date: String(form.get('due_date') || ''), company_id: deadlineCompanyId ? Number(deadlineCompanyId) : null, position_id: deadlinePositionId ? Number(deadlinePositionId) : null, notes: String(form.get('notes') || '') };
+        void submit(() => deadline?.id != null ? window.boardTracker.deadlines.update(deadline.id, input) : window.boardTracker.deadlines.create(input), 'Deadline saved.');
+      } else if (modal.kind === 'company') {
         const input: CompanyInput = { name: String(form.get('name') || ''), business_summary: String(form.get('business_summary') || ''), sector: String(form.get('sector') || ''), website: String(form.get('website') || ''), board_size: form.get('board_size') ? Number(form.get('board_size')) : null, other_board_members: String(form.get('other_board_members') || ''), meeting_cadence: String(form.get('meeting_cadence') || ''), notes: String(form.get('notes') || '') };
         void submit(() => company ? window.boardTracker.companies.update(company.id, input) : window.boardTracker.companies.create(input), 'Company saved.');
       } else if (modal.kind === 'position' && detail) {
@@ -428,7 +540,9 @@ function ModalForm({ modal, detail, instrumentTypes, close, openInstrumentTypes,
     } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
   };
   useBackgroundScrollLock();
+  useDialogHitTestRefresh();
   return <div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-header"><h2 id="modal-title">{heading}</h2><button onClick={close} aria-label="Close dialog">×</button></div><form onSubmit={onSubmit}>
+    {modal.kind === 'deadline' && <><Field label="What is due" name="title" required maxLength={200} defaultValue={deadline?.title} /><label>Type<select name="deadline_type" value={deadlineType} onChange={(event) => setDeadlineType(event.target.value as DeadlineType)}>{deadlineTypes.map((type) => <option key={type} value={type}>{label(type)}</option>)}</select></label><Field label="Due date" name="due_date" type="date" required defaultValue={deadline?.due_date} /><label>Company (optional)<select value={deadlineCompanyId} onChange={(event) => setDeadlineCompanyId(event.target.value)}><option value="">Not tied to a company</option>{companies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{deadlinePositions.length > 0 && <label>Position (optional)<select value={deadlinePositionId} onChange={(event) => setDeadlinePositionId(event.target.value)}><option value="">Company-level deadline</option>{deadlinePositions.map((item) => <option key={item.id} value={item.id}>{label(item.position_type)} · {label(item.status)}</option>)}</select></label>}<Field label="Notes" name="notes" area defaultValue={deadline?.notes} /></>}
     {modal.kind === 'company' && <><label>Company name<input name="name" required value={companyName} onChange={(event) => setCompanyName(event.target.value)} /></label>{company && companyName.trim() && companyName.trim().toLowerCase() !== company.name.toLowerCase() && <p className="rename-note" role="status">“{company.name}” will be kept as a former name, so imports written against it still match this company.</p>}<Field label="Sector" name="sector" defaultValue={company?.sector} /><Field label="Website" name="website" defaultValue={company?.website} /><Field label="Board size" name="board_size" type="number" min="0" defaultValue={company?.board_size ?? ''} /><Field label="Business summary" name="business_summary" area defaultValue={company?.business_summary} /><Field label="Other board members" name="other_board_members" area defaultValue={company?.other_board_members} /><Field label="Meeting cadence" name="meeting_cadence" defaultValue={company?.meeting_cadence} /><Field label="Notes" name="notes" area defaultValue={company?.notes} /></>}
     {modal.kind === 'position' && <><p className="form-context">Company: <strong>{detail?.name}</strong></p><label>Status<select name="status" value={status} onChange={(event) => setStatus(event.target.value as PositionStatus)}><option value="current">Current</option><option value="former">Former</option><option value="potential">Potential</option></select></label><label>Position type<select name="position_type" defaultValue={position?.position_type ?? 'governing_board'}><option value="governing_board">Governing board</option><option value="advisory_board">Advisory board</option><option value="advisor">Advisor</option></select></label><Field label="Start date" name="start_date" type="date" defaultValue={position?.start_date} /><Field label="End date" name="end_date" type="date" defaultValue={position?.end_date} />{status === 'potential' && <Field label="Expected decision date" name="expected_decision_date" type="date" defaultValue={position?.expected_decision_date} />}<Field label="Notes" name="notes" area defaultValue={position?.notes} /></>}
     {modal.kind === 'instrument-type' && <><Field label="Type name" name="name" required defaultValue={instrumentType?.name} /><Field label="Description" name="description" area defaultValue={instrumentType?.description} /></>}

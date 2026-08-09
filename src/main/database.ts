@@ -3,8 +3,12 @@ import { commitImport, previewImport } from './importer';
 import { parseImportFile } from './import-schema';
 import { runMigrations } from './migrations';
 import { calculateVestingSummary, withEffectiveEnd } from './vesting';
-import { positiveId, validateCompensation, validateCompany, validateDocument, validateInstrumentType, validatePosition, validateVestingSchedule, ValidationError } from './validation';
-import type { Company, CompanyAlias, CompanyDetail, CompanyInput, Compensation, CompensationInput, DashboardData, Document, DocumentInput, ImportBatch, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, UpcomingVesting, VestingSchedule, VestingScheduleInput } from '../shared/types';
+import { buildDeadlineItems, today, type DeadlineRow } from '../shared/deadlines';
+import { positiveId, validateCompensation, validateCompany, validateDeadline, validateDocument, validateInstrumentType, validatePosition, validateVestingSchedule, ValidationError } from './validation';
+import type { Company, CompanyAlias, CompanyDetail, CompanyInput, Compensation, CompensationInput, DashboardData, Deadline, DeadlineFilter, DeadlineItem, DeadlineInput, Document, DocumentInput, ImportBatch, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, UpcomingVesting, VestingSchedule, VestingScheduleInput } from '../shared/types';
+
+/** "Advisory board (current)" — enough to tell two positions at the same company apart. */
+const positionLabel = `(REPLACE(p.position_type,'_',' ') || ' (' || p.status || ')')`;
 
 export class BoardTrackerDatabase {
   readonly db: Database.Database;
@@ -90,13 +94,55 @@ export class BoardTrackerDatabase {
   updateDocument(id: number, input: DocumentInput): Document { const v = validateDocument(input); const result = this.db.prepare('UPDATE documents SET company_id=@company_id,position_id=@position_id,compensation_id=@compensation_id,document_type=@document_type,file_path=@file_path,file_name=@file_name,description=@description,document_date=@document_date,status=@status,updated_at=CURRENT_TIMESTAMP WHERE id=@id').run({ ...v, id: positiveId(id, 'Document') }); this.ensureChange(result, 'Document'); return this.one<Document>('SELECT * FROM documents WHERE id=?', id); }
   deleteDocument(id: number): void { const result = this.db.prepare('DELETE FROM documents WHERE id=?').run(positiveId(id, 'Document')); this.ensureChange(result, 'Document'); }
 
+  getMeta(key: string): string | null { const row = this.db.prepare('SELECT value FROM app_meta WHERE key=?').get(key) as { value: string } | undefined; return row?.value ?? null; }
+  setMeta(key: string, value: string): void { this.db.prepare("INSERT INTO app_meta(key,value,updated_at) VALUES (?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").run(key, value); }
+  /** True once the bundled sample companies have been imported, so it never happens a second time. */
+  hasImportedSeed(): boolean { return this.getMeta('seed_imported_at') !== null; }
+
+  private getDeadline(id: number): Deadline { return this.one<Deadline>('SELECT * FROM deadlines WHERE id=?', id); }
+  createDeadline(input: DeadlineInput): Deadline { const v = validateDeadline(input); const result = this.db.prepare('INSERT INTO deadlines (company_id,position_id,title,deadline_type,due_date,notes) VALUES (@company_id,@position_id,@title,@deadline_type,@due_date,@notes)').run(v); return this.getDeadline(result.lastInsertRowid as number); }
+  updateDeadline(id: number, input: DeadlineInput): Deadline { const v = validateDeadline(input); const result = this.db.prepare('UPDATE deadlines SET company_id=@company_id, position_id=@position_id, title=@title, deadline_type=@deadline_type, due_date=@due_date, notes=@notes, updated_at=CURRENT_TIMESTAMP WHERE id=@id').run({ ...v, id: positiveId(id, 'Deadline') }); this.ensureChange(result, 'Deadline'); return this.getDeadline(id); }
+  deleteDeadline(id: number): void { const result = this.db.prepare('DELETE FROM deadlines WHERE id=?').run(positiveId(id, 'Deadline')); this.ensureChange(result, 'Deadline'); }
+  setDeadlineCompleted(id: number, completed: boolean): Deadline { const result = this.db.prepare('UPDATE deadlines SET completed_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(completed ? new Date().toISOString() : null, positiveId(id, 'Deadline')); this.ensureChange(result, 'Deadline'); return this.getDeadline(id); }
+
+  /**
+   * Everything with a date attached to it, in one list: the deadlines you entered, plus the ones
+   * already implied by a position or a vesting schedule. Derived rows carry no id and are read-only
+   * here — you change them by editing the position or the schedule they come from.
+   */
+  listDeadlines(filter: DeadlineFilter = {}, asOf = today()): DeadlineItem[] {
+    const company = filter.company_id == null ? null : positiveId(filter.company_id, 'Company');
+    const scope = company == null ? '' : ' AND p.company_id=@company';
+    const rows: DeadlineRow[] = [
+      ...this.db.prepare(`SELECT 'tracked' AS source, d.id, d.title, NULL AS detail, d.due_date, d.company_id, c.name AS company_name, d.position_id, d.deadline_type, d.notes, d.completed_at FROM deadlines d LEFT JOIN companies c ON c.id=d.company_id WHERE 1=1${company == null ? '' : ' AND d.company_id=@company'}`).all({ company }) as DeadlineRow[],
+      ...this.db.prepare(`SELECT 'decision' AS source, NULL AS id, 'Decision expected' AS title, ${positionLabel} AS detail, p.expected_decision_date AS due_date, p.company_id, c.name AS company_name, p.id AS position_id, 'decision' AS deadline_type, p.notes, NULL AS completed_at FROM positions p JOIN companies c ON c.id=p.company_id WHERE p.status='potential' AND p.expected_decision_date IS NOT NULL${scope}`).all({ company }) as DeadlineRow[],
+      ...this.db.prepare(`SELECT 'term_end' AS source, NULL AS id, 'Term ends' AS title, ${positionLabel} AS detail, p.end_date AS due_date, p.company_id, c.name AS company_name, p.id AS position_id, 'review' AS deadline_type, p.notes, NULL AS completed_at FROM positions p JOIN companies c ON c.id=p.company_id WHERE p.status='current' AND p.end_date IS NOT NULL${scope}`).all({ company }) as DeadlineRow[],
+      ...this.vestingDeadlineRows(company),
+    ];
+    return buildDeadlineItems(rows, asOf, filter.include_completed === true);
+  }
+
+  /** Cliff and end dates from the newest schedule on each award. */
+  private vestingDeadlineRows(company: number | null): DeadlineRow[] {
+    const rows = this.db.prepare(`SELECT vs.*, p.company_id, p.id AS position_id, c.name AS company_name, comp.quantity, it.name AS instrument_type_name FROM vesting_schedules vs JOIN compensation comp ON comp.id=vs.compensation_id JOIN positions p ON p.id=comp.position_id JOIN companies c ON c.id=p.company_id LEFT JOIN instrument_types it ON it.id=comp.instrument_type_id WHERE vs.id=(SELECT newer.id FROM vesting_schedules newer WHERE newer.compensation_id=vs.compensation_id ORDER BY newer.id DESC LIMIT 1)${company == null ? '' : ' AND p.company_id=@company'}`).all({ company }) as Array<VestingSchedule & { company_id: number; position_id: number; company_name: string; quantity: number | null; instrument_type_name: string | null }>;
+    const out: DeadlineRow[] = [];
+    for (const row of rows) {
+      const award = [row.quantity == null ? null : row.quantity.toLocaleString(), row.instrument_type_name].filter(Boolean).join(' ') || 'Award';
+      const base = { id: null, company_id: row.company_id, company_name: row.company_name, position_id: row.position_id, notes: row.notes, completed_at: null };
+      if (row.cliff_date) out.push({ ...base, source: 'vesting_cliff', title: 'Vesting cliff', detail: award, due_date: row.cliff_date, deadline_type: 'review' });
+      const end = withEffectiveEnd(row).effective_vesting_end;
+      if (end) out.push({ ...base, source: 'vesting_end', title: 'Fully vested', detail: award, due_date: end, deadline_type: 'review' });
+    }
+    return out;
+  }
+
   dashboard(today = new Date().toISOString().slice(0, 10)): DashboardData {
     const rows = this.db.prepare('SELECT status, COUNT(*) AS count FROM positions GROUP BY status').all() as {status: 'current'|'former'|'potential'; count: number}[];
     const counts = { current: 0, former: 0, potential: 0 }; rows.forEach((row) => counts[row.status] = row.count);
     const vestingRows = this.db.prepare(`SELECT vesting_schedules.*, compensation.position_id, positions.company_id, companies.name AS company_name, compensation.quantity, instrument_types.name AS instrument_type_name FROM vesting_schedules JOIN compensation ON compensation.id=vesting_schedules.compensation_id JOIN positions ON positions.id=compensation.position_id JOIN companies ON companies.id=positions.company_id LEFT JOIN instrument_types ON instrument_types.id=compensation.instrument_type_id WHERE vesting_schedules.id=(SELECT newer.id FROM vesting_schedules newer WHERE newer.compensation_id=vesting_schedules.compensation_id ORDER BY newer.id DESC LIMIT 1) ORDER BY COALESCE(vesting_schedules.vesting_end, date(vesting_schedules.vesting_start, '+' || vesting_schedules.duration_months || ' months')) IS NULL, COALESCE(vesting_schedules.vesting_end, date(vesting_schedules.vesting_start, '+' || vesting_schedules.duration_months || ' months')) ASC, companies.name COLLATE NOCASE`).all() as Array<Omit<UpcomingVesting, 'vesting_summary'>>;
     const upcoming_vesting = vestingRows.map((row) => { const schedule = withEffectiveEnd(row); return { ...schedule, vesting_summary: calculateVestingSummary(schedule, today) }; }).filter((schedule) => schedule.vesting_summary.kind === 'percentage' && (schedule.vesting_summary.percentage ?? 0) > 0 && (schedule.vesting_summary.percentage ?? 100) < 100) as UpcomingVesting[];
     const missing_documents = this.db.prepare('SELECT documents.*, companies.name AS company_name, positions.status AS position_status, positions.position_type, compensation.type AS compensation_type, compensation.quantity AS compensation_quantity, instrument_types.name AS instrument_type_name FROM documents JOIN companies ON companies.id=documents.company_id LEFT JOIN positions ON positions.id=documents.position_id LEFT JOIN compensation ON compensation.id=documents.compensation_id LEFT JOIN instrument_types ON instrument_types.id=compensation.instrument_type_id WHERE documents.status=\'missing\' ORDER BY companies.name COLLATE NOCASE, documents.document_type COLLATE NOCASE, documents.id').all() as DashboardData['missing_documents'];
-    return { counts, upcoming: this.db.prepare("SELECT p.*, c.name AS company_name FROM positions p JOIN companies c ON c.id=p.company_id WHERE p.status='potential' ORDER BY p.expected_decision_date IS NULL, p.expected_decision_date ASC, c.name COLLATE NOCASE").all() as DashboardData['upcoming'], upcoming_vesting, missing_documents };
+    return { counts, upcoming: this.db.prepare("SELECT p.*, c.name AS company_name FROM positions p JOIN companies c ON c.id=p.company_id WHERE p.status='potential' ORDER BY p.expected_decision_date IS NULL, p.expected_decision_date ASC, c.name COLLATE NOCASE").all() as DashboardData['upcoming'], upcoming_vesting, missing_documents, deadlines: this.listDeadlines({}, today).slice(0, 8) };
   }
   previewExtractedImport(contents: string, sourceLabel: string, selections: ImportSelections = {}): ImportPlan { return previewImport(this.db, parseImportFile(contents, sourceLabel), selections); }
   commitExtractedImport(contents: string, sourceLabel: string, selections: ImportSelections = {}): ImportPlan { return commitImport(this.db, parseImportFile(contents, sourceLabel), selections); }

@@ -41,6 +41,22 @@ const migrations = [
  CREATE INDEX IF NOT EXISTS idx_company_aliases_company ON company_aliases(company_id);`,
 // 9 — how long the award vests over. Agreements routinely state a term ("vesting over 48 months")
 // without ever naming an end date, and percent-vested was uncomputable for every one of them.
-`ALTER TABLE vesting_schedules ADD COLUMN duration_months INTEGER;`
+`ALTER TABLE vesting_schedules ADD COLUMN duration_months INTEGER;`,
+// 10 — the app used to re-import the seed companies on every launch, so a company you deleted came
+// straight back the next time you opened it. Seeding is now recorded here and happens once. A
+// database that already holds companies is treated as seeded, so upgrading never resurrects
+// anything that was deleted before this migration ran.
+`CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+ INSERT OR IGNORE INTO app_meta(key,value) SELECT 'seed_imported_at', CURRENT_TIMESTAMP WHERE EXISTS (SELECT 1 FROM companies);`,
+// 11 — deadlines. company_id is nullable because not every deadline belongs to a company, and
+// position_id is SET NULL rather than CASCADE so deleting a position does not silently discard a
+// dated obligation that still stands.
+`CREATE TABLE IF NOT EXISTS deadlines (id INTEGER PRIMARY KEY, company_id INTEGER, position_id INTEGER, title TEXT NOT NULL, deadline_type TEXT NOT NULL CHECK(deadline_type IN ('board_meeting','decision','filing','document','review','payment','other')), due_date TEXT NOT NULL, notes TEXT, completed_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE, FOREIGN KEY(position_id) REFERENCES positions(id) ON DELETE SET NULL);
+ CREATE INDEX IF NOT EXISTS idx_deadlines_due ON deadlines(completed_at, due_date);
+ CREATE INDEX IF NOT EXISTS idx_deadlines_company ON deadlines(company_id);
+ CREATE INDEX IF NOT EXISTS idx_deadlines_position ON deadlines(position_id);`
 ];
+/** How many migrations exist. Tests assert against this so a new migration does not break them. */
+export const SCHEMA_VERSION = migrations.length;
+
 export function runMigrations(db: Database.Database): void { db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'); const applied = new Set((db.prepare('SELECT version FROM schema_version').all() as { version: number }[]).map((row) => row.version)); migrations.forEach((sql, index) => { const version = index + 1; if (!applied.has(version)) db.transaction(() => { db.exec(sql); db.prepare('INSERT INTO schema_version(version) VALUES (?)').run(version); })(); }); }
