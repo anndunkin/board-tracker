@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { companyResearchPrompt } from '../shared/research-prompt';
 import type { Company, CompanyAlias, CompanyDetail, CompanyInput, Compensation, CompensationFrequency, CompensationInput, CompensationType, DashboardData, Document, DocumentInput, ImportBatch, ImportFileResult, ImportNotice, ImportOperation, ImportOperationAction, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, PositionStatus, PositionType, VestingCadence, VestingSchedule, VestingScheduleInput, VestingScheduleType } from '../shared/types';
 
@@ -30,6 +31,7 @@ function App() {
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => { refreshDashboard(); refreshInstrumentTypes(); }, []);
   useEffect(() => { const timer = window.setTimeout(refreshCompanies, 120); return () => window.clearTimeout(timer); }, [search]);
+  useTrackBackgroundScroll();
   useEffect(() => {
     const seeded = () => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); if (detail) refreshDetail(detail.id); setMessage('Seed data import completed.'); };
     const changed = () => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); if (detail) refreshDetail(detail.id); };
@@ -60,8 +62,10 @@ function App() {
       {openFailure && <div className="toast document-open-error" role="alert"><span><strong>{openFailure.file_name || label(openFailure.document_type)}</strong> may have moved. Re-link it or keep it as a missing-document reminder.</span><div><button className="toast-action" onClick={() => { setModal({ kind: 'document', item: openFailure, focusFile: true }); setOpenFailure(null); }}>Re-link</button><button className="toast-action" onClick={() => markMissing(openFailure)}>Mark missing</button><button onClick={() => setOpenFailure(null)} aria-label="Dismiss">×</button></div></div>}
       {detail ? <CompanyDetailPage detail={detail} back={() => setDetail(null)} openModal={setModal} openDocument={openDocument} onDelete={() => { if (window.confirm(`Delete ${detail.name}? Its ${detail.positions.length} position(s), compensation, vesting schedules, and ${detail.documents.length} document link(s) will be deleted. The original files will not be deleted.`)) void mutate(() => window.boardTracker.companies.delete(detail.id), 'Company and related records deleted.').then(() => setDetail(null)); }} /> : view === 'dashboard' ? <Dashboard data={dashboard} showCompanies={() => setView('companies')} openCompany={openCompany} /> : view === 'companies' ? <Companies companies={companies} search={search} setSearch={setSearch} openCompany={openCompany} add={() => setModal({ kind: 'company' })} /> : view === 'import' ? <ImportExtractedData notify={setMessage} onImported={() => { refreshDashboard(); refreshCompanies(); refreshInstrumentTypes(); }} /> : <InstrumentTypes types={instrumentTypes} add={() => setModal({ kind: 'instrument-type' })} edit={(item) => setModal({ kind: 'instrument-type', item })} remove={(item) => { if (window.confirm(`Delete ${item.name}? This type cannot be deleted if it is in use by a non-cash compensation record.`)) void mutate(() => window.boardTracker.instrumentTypes.delete(item.id), 'Instrument type deleted.'); }} />}
     </main>
-    {modal?.kind === 'research' && <ResearchModal detail={modal.item} close={() => setModal(null)} />}
-    {modal && modal.kind !== 'research' && <ModalForm modal={modal} detail={detail} instrumentTypes={instrumentTypes} close={() => setModal(null)} openInstrumentTypes={openInstrumentTypes} submit={mutate} />}
+    <DialogLayer>
+      {modal?.kind === 'research' && <ResearchModal detail={modal.item} close={() => setModal(null)} />}
+      {modal && modal.kind !== 'research' && <ModalForm modal={modal} detail={detail} instrumentTypes={instrumentTypes} close={() => setModal(null)} openInstrumentTypes={openInstrumentTypes} submit={mutate} />}
+    </DialogLayer>
   </div>;
 }
 
@@ -312,16 +316,60 @@ function vestingEndNote(schedule: VestingSchedule | null | undefined): string {
  * date picker, which reads as "the dropdown ignored my click". Hiding the overflow leaves a
  * scrollbar-width gap, so pad the difference back to stop the layout jumping as dialogs open.
  */
+// The viewport is sometimes already back at the top by the time a dialog's effect runs, so the
+// offset is recorded continuously instead of read at lock time. Updates pause while a dialog holds
+// the body, so the lock's own reset cannot overwrite the position we mean to restore.
+let backgroundScrollTop = 0;
+function useTrackBackgroundScroll() {
+  useEffect(() => {
+    const record = () => { if (!document.body.style.position) backgroundScrollTop = (document.scrollingElement ?? document.documentElement).scrollTop; };
+    record();
+    document.addEventListener('scroll', record, { passive: true, capture: true });
+    return () => document.removeEventListener('scroll', record, true);
+  }, []);
+}
+
 function useBackgroundScrollLock() {
   useEffect(() => {
     const { body, documentElement } = document;
+    const scroller = document.scrollingElement ?? documentElement;
     const gutter = window.innerWidth - documentElement.clientWidth;
-    const overflow = body.style.overflow;
-    const paddingRight = body.style.paddingRight;
+    const { overflow, position, top, width, paddingRight } = body.style;
+    // Hiding the body overflow propagates to the viewport, which makes it unscrollable and drops it
+    // back to the top — and it cannot be scrolled back while it is locked. Pin the body at a
+    // negative offset instead so the page holds its place, then scroll back to it on close.
+    const scrollTop = scroller.scrollTop || backgroundScrollTop;
     body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollTop}px`;
+    body.style.width = '100%';
     if (gutter > 0) body.style.paddingRight = `${gutter}px`;
-    return () => { body.style.overflow = overflow; body.style.paddingRight = paddingRight; };
+    // Read layout back so the compositor rebuilds its hit-test regions against the styles we just
+    // wrote, instead of against the pre-dialog layout.
+    void body.offsetHeight;
+    return () => {
+      body.style.overflow = overflow; body.style.position = position; body.style.top = top; body.style.width = width; body.style.paddingRight = paddingRight;
+      void body.offsetHeight;
+      scroller.scrollTop = scrollTop;
+    };
   }, []);
+}
+
+// Dialogs render into their own layer on <body>, deliberately outside .app-shell. Nesting them in
+// the app grid — whose first child is a position:sticky sidebar — left Chromium holding stale
+// hit-test regions on Windows: the dialog painted correctly but clicks landed on whatever had been
+// under that point before the last background scroll, until something forced a relayout. Opening
+// DevTools "fixed" it for exactly that reason.
+function DialogLayer({ children }: { children: ReactNode }) {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const node = document.createElement('div');
+    node.className = 'dialog-layer';
+    document.body.append(node);
+    setHost(node);
+    return () => node.remove();
+  }, []);
+  return host ? createPortal(children, host) : null;
 }
 
 function CompensationRow({ compensation, edit, remove }: { compensation: Compensation; edit: () => void; remove: () => void }) {

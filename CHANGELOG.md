@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.2] — 2026-08-09
+
+### Fixed
+- **Text boxes in the Edit company dialog no longer ignore clicks.** Dialogs were rendered inside
+  the main app grid, whose first child is a sticky sidebar. On Windows that left Chromium holding
+  stale hit-test regions once the page behind had been scrolled: the dialog painted correctly, but
+  clicks were routed to whatever had been under that point before the scroll, so a visible field
+  simply would not take focus. It cleared as soon as anything forced a relayout — which is why
+  opening the developer tools appeared to fix it. Dialogs now render into their own layer directly
+  on the page body, outside that grid, and the layout is read back when a dialog opens so hit-test
+  regions are rebuilt against the current state.
+- **The page no longer jumps to the top when a dialog opens.** v0.6.1 claimed to preserve the
+  scroll position but did not: hiding the body overflow propagates to the viewport, which makes it
+  unscrollable and resets it. The body is now pinned at its offset while a dialog is open and the
+  page is returned to that offset on close.
+
+### Added
+- Zoom controls are back in the View menu (Actual Size, Zoom In, Zoom Out). The custom menu had
+  replaced Electron's default one and dropped them, so an accidental Ctrl+wheel zoom could not be
+  undone.
+
 ## [0.6.1] — 2026-08-09
 
 ### Fixed

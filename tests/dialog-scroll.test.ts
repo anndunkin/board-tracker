@@ -22,12 +22,53 @@ describe('dialogs hold the page still underneath them', () => {
 
   it('restores the original overflow rather than assuming it was unset', () => {
     const app = read('App.tsx');
-    expect(app).toMatch(/const overflow = body\.style\.overflow/);
-    expect(app).toMatch(/body\.style\.overflow = overflow/);
+    // Captured off body.style before anything is written, and written back verbatim on close.
+    expect(app).toMatch(/const \{ overflow, position, top, width, paddingRight \} = body\.style/);
+    for (const prop of ['overflow = overflow', 'position = position', 'top = top', 'width = width', 'paddingRight = paddingRight']) {
+      expect(app).toContain(`body.style.${prop}`);
+    }
   });
 
   it('pads the scrollbar gutter so the page does not jump sideways as a dialog opens', () => {
     expect(read('App.tsx')).toMatch(/window\.innerWidth - documentElement\.clientWidth/);
+  });
+
+  it('renders dialogs into a body-level layer, not inside the sticky-sidebar grid', () => {
+    const app = read('App.tsx');
+    // Nested inside .app-shell, Chromium kept stale hit-test regions on Windows: the dialog painted
+    // but clicks landed where the pre-scroll layout had been, intermittently, until a relayout.
+    expect(app).toMatch(/import \{ createPortal \} from 'react-dom'/);
+    expect(app).toMatch(/function DialogLayer\(/);
+    expect(app).toMatch(/createPortal\(children, host\)/);
+    expect(app).toMatch(/document\.body\.append\(node\)/);
+    // Every backdrop-rendering component must go through the layer.
+    const shell = app.slice(app.indexOf('return <div className="app-shell">'), app.indexOf('</div>;'));
+    const rendered = shell.split('\n').filter((line) => /<(ResearchModal|ModalForm) /.test(line));
+    expect(rendered.length).toBeGreaterThan(0);
+    const layer = app.slice(app.indexOf('<DialogLayer>'), app.indexOf('</DialogLayer>'));
+    for (const line of rendered) expect(layer).toContain(line.trim());
+  });
+
+  it('reads layout back after locking so hit-test regions are rebuilt', () => {
+    expect(read('App.tsx')).toMatch(/void body\.offsetHeight/);
+  });
+
+  it('holds the page at its scroll offset instead of letting it snap to the top', () => {
+    const app = read('App.tsx');
+    // Hiding the body overflow propagates to the viewport and resets it, so the body is pinned at a
+    // negative offset and the offset is put back on close.
+    expect(app).toMatch(/body\.style\.position = 'fixed'/);
+    expect(app).toMatch(/body\.style\.top = `-\$\{scrollTop\}px`/);
+    expect(app).toMatch(/scroller\.scrollTop = scrollTop/);
+    // The offset is tracked continuously, because by lock time it has sometimes already gone.
+    expect(app).toMatch(/function useTrackBackgroundScroll\(/);
+    expect(app).toMatch(/scroller\.scrollTop \|\| backgroundScrollTop/);
+    expect(app).toContain('useTrackBackgroundScroll();');
+  });
+
+  it('keeps zoom controls in the menu so an accidental Ctrl+wheel zoom can be undone', () => {
+    const main = readFileSync(join(__dirname, '..', 'src', 'main', 'main.ts'), 'utf8');
+    for (const role of ['resetZoom', 'zoomIn', 'zoomOut']) expect(main).toContain(`role: '${role}'`);
   });
 
   it('contains overscroll inside the dialog so a wheel at its end does not chain outward', () => {
