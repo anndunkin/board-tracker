@@ -24,7 +24,9 @@ export interface VestingSchedule extends Omit<VestingScheduleInput, 'cliff_date'
 export interface VestingSummary { kind: 'percentage' | 'not_calculable'; percentage?: number; text: string; }
 export interface DocumentInput { company_id: number; position_id?: number | null; compensation_id?: number | null; document_type: string; file_path?: string | null; file_name?: string | null; description?: string | null; document_date?: string | null; status: DocumentStatus; }
 export interface Document extends Omit<DocumentInput, 'position_id' | 'compensation_id' | 'file_path' | 'file_name' | 'description' | 'document_date'> { id: number; position_id: number | null; compensation_id: number | null; file_path: string | null; file_name: string | null; description: string | null; document_date: string | null; created_at: string; updated_at: string; position_status?: PositionStatus | null; position_type?: PositionType | null; compensation_type?: CompensationType | null; compensation_quantity?: number | null; instrument_type_name?: string | null; }
-export interface CompanyDetail extends Company { positions: Array<Position & { compensation: Compensation[] }>; documents: Document[]; }
+/** A name this company used to be known by. Imports match on these as well as the current name. */
+export interface CompanyAlias { id: number; company_id: number; name: string; source: 'rename' | 'manual'; created_at: string; }
+export interface CompanyDetail extends Company { positions: Array<Position & { compensation: Compensation[] }>; documents: Document[]; aliases: CompanyAlias[]; }
 export interface UpcomingVesting extends VestingSchedule { company_id: number; company_name: string; position_id: number; quantity: number | null; instrument_type_name: string | null; vesting_summary: VestingSummary; }
 export interface MissingDocument extends Document { company_name: string; }
 export interface DashboardData { counts: Record<PositionStatus, number>; upcoming: Array<Position & { company_name: string }>; upcoming_vesting: UpcomingVesting[]; missing_documents: MissingDocument[]; }
@@ -50,7 +52,7 @@ export interface ImportFileResult { file_path: string; file_name: string; conten
 
 export interface BoardTrackerApi {
   dashboard: () => Promise<DashboardData>;
-  companies: { list: (search?: string) => Promise<Company[]>; get: (id: number) => Promise<CompanyDetail | null>; create: (input: CompanyInput) => Promise<Company>; update: (id: number, input: CompanyInput) => Promise<Company>; delete: (id: number) => Promise<void>; };
+  companies: { list: (search?: string) => Promise<Company[]>; get: (id: number) => Promise<CompanyDetail | null>; create: (input: CompanyInput) => Promise<Company>; update: (id: number, input: CompanyInput) => Promise<Company>; delete: (id: number) => Promise<void>; copyResearchPrompt: (name: string, website?: string | null) => Promise<string>; addAlias: (id: number, name: string) => Promise<CompanyAlias>; deleteAlias: (aliasId: number) => Promise<void>; };
   positions: { create: (input: PositionInput) => Promise<Position>; update: (id: number, input: PositionInput) => Promise<Position>; delete: (id: number) => Promise<void>; };
   compensation: { create: (input: CompensationInput) => Promise<Compensation>; update: (id: number, input: CompensationInput) => Promise<Compensation>; delete: (id: number) => Promise<void>; };
   instrumentTypes: { list: () => Promise<InstrumentType[]>; create: (input: InstrumentTypeInput) => Promise<InstrumentType>; update: (id: number, input: InstrumentTypeInput) => Promise<InstrumentType>; delete: (id: number) => Promise<void>; };

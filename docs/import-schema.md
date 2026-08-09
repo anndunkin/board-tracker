@@ -128,13 +128,20 @@ Nothing is matched by id, and **nothing is silently overwritten**.
 
 | Record | Matched by |
 | --- | --- |
-| Company | `name`, case-insensitive |
+| Company | `name`, case-insensitive; then any name the company was previously known by |
 | Position | `position_type` + `status` within the company, then `start_date` when supplied |
 | Instrument type | `name`, case-insensitive |
 | Cash compensation | `amount` + `currency` + `frequency` within the position |
 | Non-cash compensation | instrument type + `quantity` + `grant_date` within the position |
 | Vesting | the most recent schedule on that grant |
 | Document | `document_type` + the same company/position/grant link, preferring the same `file_path`, then a `missing` flag |
+
+When a company is renamed in Board Tracker, the name it left behind is remembered and keeps matching
+imports. A file written against `ArmorX.ai` still updates the company now called
+`Kapalya, Inc. dba ArmorX.ai` rather than creating a second record, and the plan row says so by
+name. Former names are listed under **Also known as** on the company record, where you can add one
+by hand or remove one. A name cannot be a former name of one company and the current name of
+another; either direction is rejected rather than guessed at.
 
 Each matched or unmatched record becomes one reviewable row in the plan:
 
@@ -186,3 +193,41 @@ This is the exact text behind the **Copy extraction prompt** button; a test keep
 > not invent values — omit a field rather than guessing it.
 
 See [`import-example.json`](./import-example.json) for a complete worked file.
+
+## Prompt behind "Research this company"
+
+Board Tracker makes no network calls, so the **Research this company** button on a company record
+copies a prompt instead of fetching anything. Run it in a Perplexity session, attach the schema
+file, and paste the JSON back into **Import extracted data** — it goes through the same
+review-before-commit screen as an agreement extraction. The prompt asks for company profile fields
+only; nothing about your own seat, pay, or vesting is researched or requested. The company name and
+website are substituted from the record, and the "Its website is …" sentence is omitted when no
+website is on file.
+
+> Research the company "{name}" and produce a Board Tracker import file describing it. Its website
+> is {website}.
+>
+> Follow the attached `board-tracker.import.schema.json` exactly, including its field names. Output
+> only JSON matching the `board-tracker.import` schema version 1: a top-level object with `schema`,
+> `schema_version`, `generated_at`, `source`, and `companies`, containing exactly one company.
+>
+> Set `name` to the company's full legal name if you can establish it, and give `fields` these
+> entries where you can support them:
+> - `business_summary`: two or three sentences on what the company actually sells and to whom.
+>   Plain description, no marketing language.
+> - `sector`: a short industry label, a few words at most.
+> - `website`: the primary domain.
+> - `board_size`: the number of directors, only if you can count them from a named source.
+> - `other_board_members`: the directors and their affiliations, one per line, excluding me.
+>
+> Rules that matter more than completeness:
+> - Do not guess. Omit any field you cannot support with a source. An absent field is fine; a
+>   plausible invention is not.
+> - Do not write anything about my own board seat, compensation, vesting, or documents. Return no
+>   `positions` array.
+> - Put your sourcing in the company's `extracted_data` object: a `sources` array of {url, title}
+>   for what you used, a `confidence` marker, and a `researched_on` date. Anything interesting that
+>   the schema has no field for can go in `extracted_data` too — Board Tracker keeps it and shows it
+>   to me rather than discarding it.
+> - If the name is ambiguous and several companies could match, say so in `source.notes` and
+>   describe the one you chose.

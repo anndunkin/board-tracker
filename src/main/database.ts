@@ -4,7 +4,7 @@ import { parseImportFile } from './import-schema';
 import { runMigrations } from './migrations';
 import { calculateVestingSummary } from './vesting';
 import { positiveId, validateCompensation, validateCompany, validateDocument, validateInstrumentType, validatePosition, validateVestingSchedule, ValidationError } from './validation';
-import type { Company, CompanyDetail, CompanyInput, Compensation, CompensationInput, DashboardData, Document, DocumentInput, ImportBatch, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, UpcomingVesting, VestingSchedule, VestingScheduleInput } from '../shared/types';
+import type { Company, CompanyAlias, CompanyDetail, CompanyInput, Compensation, CompensationInput, DashboardData, Document, DocumentInput, ImportBatch, ImportPlan, ImportSelections, InstrumentType, InstrumentTypeInput, Position, PositionInput, UpcomingVesting, VestingSchedule, VestingScheduleInput } from '../shared/types';
 
 export class BoardTrackerDatabase {
   readonly db: Database.Database;
@@ -22,10 +22,51 @@ export class BoardTrackerDatabase {
     const byPosition = this.db.prepare('SELECT compensation.*, instrument_types.name AS instrument_type_name FROM compensation LEFT JOIN instrument_types ON instrument_types.id=compensation.instrument_type_id WHERE compensation.position_id=? ORDER BY compensation.id DESC');
     const activeSchedule = this.db.prepare('SELECT * FROM vesting_schedules WHERE compensation_id=? ORDER BY id DESC LIMIT 1');
     const documents = this.db.prepare('SELECT documents.*, positions.status AS position_status, positions.position_type, compensation.type AS compensation_type, compensation.quantity AS compensation_quantity, instrument_types.name AS instrument_type_name FROM documents LEFT JOIN positions ON positions.id=documents.position_id LEFT JOIN compensation ON compensation.id=documents.compensation_id LEFT JOIN instrument_types ON instrument_types.id=compensation.instrument_type_id WHERE documents.company_id=? ORDER BY documents.status DESC, documents.document_date IS NULL, documents.document_date DESC, documents.id DESC').all(company.id) as Document[];
-    return { ...company, positions: positions.map((position) => ({ ...position, compensation: (byPosition.all(position.id) as Compensation[]).map((compensation) => (((active_vesting_schedule) => ({ ...compensation, active_vesting_schedule, vesting_summary: active_vesting_schedule ? calculateVestingSummary(active_vesting_schedule) : undefined }))((activeSchedule.get(compensation.id) as VestingSchedule | undefined) ?? null))) })), documents };
+    const aliases = this.db.prepare('SELECT * FROM company_aliases WHERE company_id=? ORDER BY created_at DESC, id DESC').all(company.id) as CompanyAlias[];
+    return { ...company, aliases, positions: positions.map((position) => ({ ...position, compensation: (byPosition.all(position.id) as Compensation[]).map((compensation) => (((active_vesting_schedule) => ({ ...compensation, active_vesting_schedule, vesting_summary: active_vesting_schedule ? calculateVestingSummary(active_vesting_schedule) : undefined }))((activeSchedule.get(compensation.id) as VestingSchedule | undefined) ?? null))) })), documents };
   }
   createCompany(input: CompanyInput): Company { const v = validateCompany(input); try { const result = this.db.prepare('INSERT INTO companies (name,business_summary,sector,website,board_size,other_board_members,meeting_cadence,notes) VALUES (@name,@business_summary,@sector,@website,@board_size,@other_board_members,@meeting_cadence,@notes)').run(v); return this.getCompany(result.lastInsertRowid as number)!; } catch (error) { return this.duplicate(error, 'company'); } }
-  updateCompany(id: number, input: CompanyInput): Company { const v = validateCompany(input); try { const result = this.db.prepare('UPDATE companies SET name=@name,business_summary=@business_summary,sector=@sector,website=@website,board_size=@board_size,other_board_members=@other_board_members,meeting_cadence=@meeting_cadence,notes=@notes,updated_at=CURRENT_TIMESTAMP WHERE id=@id').run({ ...v, id: positiveId(id, 'Company') }); this.ensureChange(result, 'Company'); return this.getCompany(id)!; } catch (error) { return this.duplicate(error, 'company'); } }
+  updateCompany(id: number, input: CompanyInput): Company {
+    const v = validateCompany(input);
+    const companyId = positiveId(id, 'Company');
+    const previous = this.db.prepare('SELECT name FROM companies WHERE id=?').pluck().get(companyId) as string | undefined;
+    if (previous === undefined) throw new Error('Company not found.');
+    const renamed = previous.toLowerCase() !== v.name.toLowerCase();
+    // A rename must not steal a name another company is already remembered by, or the importer
+    // would have two candidates for the same string and could attach records to the wrong company.
+    if (renamed) {
+      const clash = this.db.prepare('SELECT company_id FROM company_aliases WHERE name=? COLLATE NOCASE').pluck().get(v.name) as number | undefined;
+      if (clash !== undefined && clash !== companyId) throw new Error(`"${v.name}" is already a former name of ${this.db.prepare('SELECT name FROM companies WHERE id=?').pluck().get(clash)}. Pick a different name, or remove that former name first.`);
+    }
+    try {
+      return this.db.transaction(() => {
+        const result = this.db.prepare('UPDATE companies SET name=@name,business_summary=@business_summary,sector=@sector,website=@website,board_size=@board_size,other_board_members=@other_board_members,meeting_cadence=@meeting_cadence,notes=@notes,updated_at=CURRENT_TIMESTAMP WHERE id=@id').run({ ...v, id: companyId });
+        this.ensureChange(result, 'Company');
+        // Remember what it used to be called, so an import file written against the old name still
+        // matches. Any alias equal to the new name is dropped: a company is not its own former name.
+        if (renamed) {
+          this.db.prepare("INSERT OR IGNORE INTO company_aliases(company_id,name,source) VALUES (?,?,'rename')").run(companyId, previous);
+          this.db.prepare('DELETE FROM company_aliases WHERE company_id=? AND name=? COLLATE NOCASE').run(companyId, v.name);
+        }
+        return this.getCompany(companyId)!;
+      })();
+    } catch (error) { return this.duplicate(error, 'company'); }
+  }
+
+  listCompanyAliases(companyId: number): CompanyAlias[] { return this.db.prepare('SELECT * FROM company_aliases WHERE company_id=? ORDER BY created_at DESC, id DESC').all(positiveId(companyId, 'Company')) as CompanyAlias[]; }
+
+  addCompanyAlias(companyId: number, name: string): CompanyAlias {
+    const id = positiveId(companyId, 'Company');
+    const trimmed = (name ?? '').trim();
+    if (!trimmed) throw new Error('A former name is required.');
+    if ((this.db.prepare('SELECT name FROM companies WHERE id=?').pluck().get(id) as string | undefined)?.toLowerCase() === trimmed.toLowerCase()) throw new Error('That is the company\u2019s current name.');
+    const owner = this.db.prepare('SELECT id FROM companies WHERE name=? COLLATE NOCASE').pluck().get(trimmed) as number | undefined;
+    if (owner !== undefined) throw new Error(`"${trimmed}" is the current name of another company.`);
+    try { const result = this.db.prepare("INSERT INTO company_aliases(company_id,name,source) VALUES (?,?,'manual')").run(id, trimmed); return this.db.prepare('SELECT * FROM company_aliases WHERE id=?').get(result.lastInsertRowid) as CompanyAlias; }
+    catch (error) { if (String(error).includes('UNIQUE')) throw new Error(`"${trimmed}" is already recorded as a former name.`); throw error; }
+  }
+
+  deleteCompanyAlias(aliasId: number): void { const result = this.db.prepare('DELETE FROM company_aliases WHERE id=?').run(positiveId(aliasId, 'Former name')); this.ensureChange(result, 'Former name'); }
   deleteCompany(id: number): void { const result = this.db.prepare('DELETE FROM companies WHERE id=?').run(positiveId(id, 'Company')); this.ensureChange(result, 'Company'); }
 
   createPosition(input: PositionInput): Position { const v = validatePosition(input); const result = this.db.prepare('INSERT INTO positions(company_id,status,position_type,start_date,end_date,expected_decision_date,notes) VALUES (@company_id,@status,@position_type,@start_date,@end_date,@expected_decision_date,@notes)').run(v); return this.one<Position>('SELECT * FROM positions WHERE id=?', result.lastInsertRowid); }

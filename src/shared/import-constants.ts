@@ -4,6 +4,11 @@ import type { CompensationFrequency, CompensationType, DocumentStatus, PositionS
  * The single source of truth for every enumerated import value. The runtime parser and the
  * published JSON Schema both read these, so the two can never disagree about what is legal.
  */
+/** Identity of the import format. Shared so the renderer and prompts can name it without
+ * reaching into main-process code. */
+export const IMPORT_SCHEMA_ID = 'board-tracker.import';
+export const IMPORT_SCHEMA_VERSION = 1;
+
 export const positionStatuses: PositionStatus[] = ['current', 'former', 'potential'];
 export const positionTypes: PositionType[] = ['governing_board', 'advisory_board', 'advisor'];
 export const compensationTypes: CompensationType[] = ['cash', 'non_cash'];

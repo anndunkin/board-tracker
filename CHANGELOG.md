@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.5.0] — 2026-08-09
+
+Two changes that turn out to be one change. Renaming a company was impossible without breaking
+future imports, because imports match on name — so the moment you recorded a DBA, the next
+extraction of the same agreement would create a second company beside the first. Renaming is now
+free because the app remembers what the company used to be called.
+
+### Added
+- **Companies can be renamed.** Editing the name records the previous one as a former name, shown
+  under **Also known as** on the company record. Imports match on former names as well as the
+  current one, so a file written against `ArmorX.ai` updates the company now called
+  `Kapalya, Inc. dba ArmorX.ai` instead of duplicating it — and the plan row says which former name
+  it matched on, rather than matching quietly. You can add a former name by hand (for an
+  abbreviation an older file used) or remove one. The edit dialog warns you what will be remembered
+  before you save.
+- **Research this company.** A button on the company record copies a prompt that fills in the
+  profile fields — business summary, sector, website, board size, other directors — by researching
+  the company in a Perplexity session. The result comes back as an ordinary import file through the
+  same review-before-commit screen, so nothing is written without your approval, and the prompt
+  requires a source for every field and forbids guessing. It asks for company facts only: nothing
+  about your seat, pay, or vesting is sent anywhere.
+
+### Notes
+- Board Tracker still makes **no network calls of its own**. Research happens in your browser
+  session; the app only reads the JSON you bring back.
+- A name cannot be a former name of one company and the current name of another. Both directions are
+  rejected with the conflicting company named, rather than resolved by guessing.
+- Renaming a company back to an earlier name drops that name from the list and remembers the one
+  just abandoned instead, so the list never contains the name the company currently holds.
+- Schema migration 8 adds the `company_aliases` table. Existing databases migrate on first launch;
+  no data is rewritten.
+
 ## [0.4.2] — 2026-08-09
 
 Prompted by a real extraction that the v0.4.1 importer rejected four times in a row, each time

@@ -2,8 +2,8 @@ import { ValidationError } from './validation';
 import { cadences, compensationTypes, documentStatuses, frequencies, positionStatuses, positionTypes, scheduleTypes } from '../shared/import-constants';
 import type { ImportCompanyNode, ImportCompensationNode, ImportDocumentNode, ImportNotice, ImportPayload, ImportPositionNode, ImportVestingNode } from '../shared/types';
 
-export const IMPORT_SCHEMA_ID = 'board-tracker.import';
-export const IMPORT_SCHEMA_VERSION = 1;
+import { IMPORT_SCHEMA_ID, IMPORT_SCHEMA_VERSION } from '../shared/import-constants';
+export { IMPORT_SCHEMA_ID, IMPORT_SCHEMA_VERSION };
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_COMPANIES = 500;

@@ -153,14 +153,18 @@ class ImportRun {
   }
 
   private company(company: ImportCompanyNode, key: string): void {
-    const existing = this.db.prepare('SELECT * FROM companies WHERE name=? COLLATE NOCASE').get(company.name) as Record<string, unknown> | undefined;
+    // Match on the current name first, then on any name the company was previously known by, so a
+    // rename does not turn the next import of the same agreement into a duplicate company.
+    const existing = (this.db.prepare('SELECT * FROM companies WHERE name=? COLLATE NOCASE').get(company.name)
+      ?? this.db.prepare('SELECT companies.* FROM companies JOIN company_aliases ON company_aliases.company_id=companies.id WHERE company_aliases.name=? COLLATE NOCASE').get(company.name)) as Record<string, unknown> | undefined;
+    const matchedByFormerName = existing !== undefined && String(existing.name).toLowerCase() !== company.name.toLowerCase();
     let companyId: number | null = null;
     if (!existing) {
       const changes: ImportChange[] = [{ field: 'name', from: null, to: company.name, overwrite: false }, ...Object.entries(company.fields).filter(([, to]) => !blank(to)).map(([field, to]) => ({ field, from: null, to: String(to), overwrite: false }))];
       if (this.record({ key, kind: 'company', action: 'create', context: company.name, label: company.name, changes, reason: 'No company with this name exists yet.' })) companyId = this.db.prepare('INSERT INTO companies(name,business_summary,sector,website,board_size,other_board_members,meeting_cadence,notes,extracted_data_json) VALUES (?,?,?,?,?,?,?,?,?)').run(company.name, company.fields.business_summary, company.fields.sector, company.fields.website, company.fields.board_size, company.fields.other_board_members, company.fields.meeting_cadence, company.fields.notes, company.extracted_data_json).lastInsertRowid as number;
     } else {
       companyId = existing.id as number;
-      this.record({ key, kind: 'company', action: 'skip', context: company.name, label: company.name, changes: [], reason: `Matched existing company #${companyId}.` });
+      this.record({ key, kind: 'company', action: 'skip', context: company.name, label: company.name, changes: [], reason: matchedByFormerName ? `Matched existing company #${companyId}, now named "${existing.name}", by its former name "${company.name}".` : `Matched existing company #${companyId}.` });
       const verdict = classify(existing, company.fields as Record<string, unknown>);
       if (verdict.changes.length && this.record({ key: `${key}.fields`, kind: 'company_fields', action: verdict.action, context: company.name, label: `${company.name} — profile fields`, changes: verdict.changes, reason: verdict.reason })) {
         const set = verdict.changes.map((change) => `${change.field}=@${change.field}`).join(',');

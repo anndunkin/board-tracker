@@ -2,6 +2,7 @@ import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, shell } from 'ele
 import path from 'node:path';
 import fs from 'node:fs';
 import { BoardTrackerDatabase } from './database';
+import { companyResearchPrompt } from '../shared/research-prompt';
 import { EXTRACTION_PROMPT } from '../shared/extraction-prompt';
 import { IMPORT_JSON_SCHEMA_FILENAME, importJsonSchemaText } from '../shared/import-json-schema';
 let database: BoardTrackerDatabase;
@@ -11,6 +12,8 @@ function createWindow(): void { const window = new BrowserWindow({ width: 1280, 
 function registerHandlers(): void {
   ipcMain.handle('dashboard:get', () => database.dashboard());
   ipcMain.handle('companies:list', (_e, search?: string) => database.listCompanies(search)); ipcMain.handle('companies:get', (_e, id: number) => database.getCompany(id)); ipcMain.handle('companies:create', (_e, input) => database.createCompany(input)); ipcMain.handle('companies:update', (_e, id, input) => database.updateCompany(id, input)); ipcMain.handle('companies:delete', (_e, id) => database.deleteCompany(id));
+  ipcMain.handle('companies:copy-research-prompt', (_e, name: string, website?: string | null) => { const text = companyResearchPrompt(name, website); clipboard.writeText(text); return text; });
+  ipcMain.handle('companies:add-alias', (_e, id: number, name: string) => database.addCompanyAlias(id, name)); ipcMain.handle('companies:delete-alias', (_e, aliasId: number) => database.deleteCompanyAlias(aliasId));
   ipcMain.handle('positions:create', (_e, input) => database.createPosition(input)); ipcMain.handle('positions:update', (_e, id, input) => database.updatePosition(id, input)); ipcMain.handle('positions:delete', (_e, id) => database.deletePosition(id));
   ipcMain.handle('compensation:create', (_e, input) => database.createCompensation(input)); ipcMain.handle('compensation:update', (_e, id, input) => database.updateCompensation(id, input)); ipcMain.handle('compensation:delete', (_e, id) => database.deleteCompensation(id));
   ipcMain.handle('instrument-types:list', () => database.listInstrumentTypes()); ipcMain.handle('instrument-types:create', (_e, input) => database.createInstrumentType(input)); ipcMain.handle('instrument-types:update', (_e, id, input) => database.updateInstrumentType(id, input)); ipcMain.handle('instrument-types:delete', (_e, id) => database.deleteInstrumentType(id));
