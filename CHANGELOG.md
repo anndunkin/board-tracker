@@ -7,7 +7,8 @@
   configured, so Windows fell back to the generic Electron logo everywhere. Board Tracker now ships
   a proper multi-resolution icon — a boardroom table with four seats, in the app's own dark green
   and mint — drawn separately at each size Windows uses rather than scaled down from one image, so
-  it stays sharp at 16px in the taskbar. The installer, uninstaller, and both shortcuts use it too,
+  it stays sharp at 16px in the taskbar — the 16, 24, and 32px versions are drawn directly on the
+  pixel grid, because scaling the artwork down blurred the table into the seats at taskbar size. The installer, uninstaller, and both shortcuts use it too,
   and the app declares its application id on Windows so the taskbar button is attributed to Board
   Tracker rather than to the underlying Electron process.
 
