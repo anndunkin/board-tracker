@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.1] — 2026-08-09
+
+### Fixed
+- **The app now has its own icon on the taskbar, desktop, and Start menu.** No icon was ever
+  configured, so Windows fell back to the generic Electron logo everywhere. Board Tracker now ships
+  a proper multi-resolution icon — a boardroom table with four seats, in the app's own dark green
+  and mint — drawn separately at each size Windows uses rather than scaled down from one image, so
+  it stays sharp at 16px in the taskbar. The installer, uninstaller, and both shortcuts use it too,
+  and the app declares its application id on Windows so the taskbar button is attributed to Board
+  Tracker rather than to the underlying Electron process.
+
 ## [0.7.0] — 2026-08-09
 
 ### Added

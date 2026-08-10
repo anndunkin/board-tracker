@@ -1,6 +1,6 @@
 {
   "name": "board-tracker",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "A desktop app for tracking board and advisory positions.",
   "private": true,
   "main": "dist/main/main.js",
@@ -44,23 +44,43 @@
     ],
     "files": [
       "dist/**/*",
+      "assets/icon.ico",
+      "assets/icon.png",
       "package.json"
     ],
     "extraResources": [
       {
         "from": "assets/seed_data.json",
         "to": "seed_data.json"
+      },
+      {
+        "from": "assets/icon.png",
+        "to": "icon.png"
       }
     ],
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
+      "icon": "assets/icon.ico",
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Board Tracker",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "copyright": "Copyright \u00a9 2026 Ann Dunkin"
   }
 }

@@ -8,8 +8,13 @@ import { EXTRACTION_PROMPT } from '../shared/extraction-prompt';
 import { IMPORT_JSON_SCHEMA_FILENAME, importJsonSchemaText } from '../shared/import-json-schema';
 let database: BoardTrackerDatabase;
 const seedPath = (): string => app.isPackaged ? path.join(process.resourcesPath, 'seed_data.json') : path.join(app.getAppPath(), 'assets', 'seed_data.json');
+/**
+ * The window icon. A packaged build gets its taskbar icon from the icon compiled into the .exe, so
+ * this mainly matters when running unpackaged, where there is no .exe resource to read.
+ */
+const iconPath = (): string => app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(app.getAppPath(), 'assets', 'icon.png');
 const importSeedData = (force = false): SeedImportResult => importSeedOnce(database, () => JSON.parse(fs.readFileSync(seedPath(), 'utf8')), force);
-function createWindow(): void { const window = new BrowserWindow({ width: 1280, height: 820, minWidth: 960, minHeight: 640, title: 'Board Tracker', webPreferences: { preload: path.join(__dirname, '../preload/preload.js'), sandbox: true, contextIsolation: true, nodeIntegration: false } }); const devServer = process.env.VITE_DEV_SERVER_URL; if (devServer) window.loadURL(devServer); else window.loadFile(path.join(__dirname, '../renderer/index.html')); }
+function createWindow(): void { const window = new BrowserWindow({ width: 1280, height: 820, minWidth: 960, minHeight: 640, title: 'Board Tracker', icon: iconPath(), webPreferences: { preload: path.join(__dirname, '../preload/preload.js'), sandbox: true, contextIsolation: true, nodeIntegration: false } }); const devServer = process.env.VITE_DEV_SERVER_URL; if (devServer) window.loadURL(devServer); else window.loadFile(path.join(__dirname, '../renderer/index.html')); }
 function registerHandlers(): void {
   ipcMain.handle('dashboard:get', () => database.dashboard());
   ipcMain.handle('companies:list', (_e, search?: string) => database.listCompanies(search)); ipcMain.handle('companies:get', (_e, id: number) => database.getCompany(id)); ipcMain.handle('companies:create', (_e, input) => database.createCompany(input)); ipcMain.handle('companies:update', (_e, id, input) => database.updateCompany(id, input)); ipcMain.handle('companies:delete', (_e, id) => database.deleteCompany(id));
@@ -32,5 +37,9 @@ function registerHandlers(): void {
   // Writes the JSON Schema out so it can be attached to the extraction session alongside the agreement.
   ipcMain.handle('extracted-import:save-schema', async (event) => { const parent = BrowserWindow.fromWebContents(event.sender); const options: Electron.SaveDialogOptions = { title: 'Save extraction schema', defaultPath: path.join(app.getPath('downloads'), IMPORT_JSON_SCHEMA_FILENAME), filters: [{ name: 'JSON Schema', extensions: ['json'] }] }; const result = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options); if (result.canceled || !result.filePath) return null; fs.writeFileSync(result.filePath, importJsonSchemaText(), 'utf8'); return result.filePath; });
 }
+// Windows groups taskbar buttons and finds the shortcut's icon by this id; without it the button
+// is attributed to the host Electron process rather than to Board Tracker.
+if (process.platform === 'win32') app.setAppUserModelId('com.dunkinglobaladvisors.boardtracker');
+
 app.whenReady().then(() => { database = new BoardTrackerDatabase(path.join(app.getPath('userData'), 'board-tracker.db')); registerHandlers(); importSeedData(); Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'File', submenu: [{ label: 'Import Seed Data', click: () => { importSeedData(true); BrowserWindow.getAllWindows().forEach((window) => window.webContents.send('seed-imported')); } }, { role: 'quit' }] }, { label: 'View', submenu: [{ role: 'reload' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'toggleDevTools' }] }])); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); }); app.on('before-quit', () => database?.close());
